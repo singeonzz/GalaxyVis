@@ -33,10 +33,10 @@ const testEvent = () => {
                 y: Math.floor(i / num) * 100 - 150,
                 color: colors[Math.floor(Math.random() * colors.length) || 0],
                 text: `n${i}`,
-                // innerStroke: {
-                //     width: 2.0,
-                //     color: "#f0f"
-                // }
+                innerStroke: {
+                    width: 2.0,
+                    color: colors[Math.floor(Math.random() * colors.length) || 0],
+                }
             },
         }
     }
