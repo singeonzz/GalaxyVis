@@ -1,6 +1,6 @@
 import galaxyvis from '../src/galaxyVis'
 
-let renderer = 'webgl'
+let renderer = 'webgpu'
 let galaxyVis = new galaxyvis({
     container: 'container',
     renderer: renderer,
@@ -29,10 +29,14 @@ const testEvent = () => {
         arr[i] = {
             id: `n${i}`,
             attribute: {
-                x: (i % num) * 100,
-                y: Math.floor(i / num) * 100,
+                x: (i % num) * 100 - 100,
+                y: Math.floor(i / num) * 100 - 150,
                 color: colors[Math.floor(Math.random() * colors.length) || 0],
-                text: `n${i}`
+                text: `n${i}`,
+                // innerStroke: {
+                //     width: 2.0,
+                //     color: "#f0f"
+                // }
             },
         }
     }

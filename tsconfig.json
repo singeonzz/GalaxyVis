@@ -8,7 +8,11 @@
       "esModuleInterop": true,
       "downlevelIteration": true,
       "resolveJsonModule": true,
-      "typeRoots": ["./node_modules/@types/", "./external-types/"],
+      "typeRoots": [
+        "./node_modules/@types/", 
+        "./external-types/", 
+        "./node_modules/@webgpu/types/"
+      ],
       "lib": ["dom"],
     },
     "include": ["./external-types/**/*", "./src/**/*"],

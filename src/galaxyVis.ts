@@ -32,25 +32,28 @@ import {
 } from './utils'
 import { cloneDeep, get, has, debounce, merge } from 'lodash'
 import pulseCanvas from './renderers/canvas/pulse'
+import { CheckWebGPU, InitGPU } from './utils/webGPUtils'
+import NodeGPUProgram from './renderers/webgpu/programs/node'
 
 export default class galaxyvis extends Graph {
     public gl!: WebGLRenderingContext // webgl上下文
     public ctx!: CanvasRenderingContext2D // canvas上下文
+    public gpu: any
     public thumbnail: boolean = false //是否用于缩略图
-    public renderer: string = "webgl"
+    public renderer: string = 'webgl'
     public id: string
     private camera: Camera | null //相机
     private mouseCaptor: CaptorsMouse | null //鼠标事件
-    private nodeProgram!: nodeProgram | nodeCanvas | fastnodeProgram //点渲染器
-    private textProgram!: sdfTextProgram | lableCanvas  //文字渲染器
-    private edgeProgram!: edgeProgram | edgeCanvas  //边渲染器
-    private haloProgram!: haloProgram | haloCanvas  //光环渲染器
+    private nodeProgram!: nodeProgram | nodeCanvas | fastnodeProgram | NodeGPUProgram //点渲染器
+    private textProgram!: sdfTextProgram | lableCanvas //文字渲染器
+    private edgeProgram!: edgeProgram | edgeCanvas //边渲染器
+    private haloProgram!: haloProgram | haloCanvas //光环渲染器
     private debounce!: Function // 防抖函数
     private localUpdate: boolean = true //开启局部更新
     private textStatus: boolean = true //是否渲染文字
     private divContainer: HTMLElement | null | undefined
     private pulse: boolean = false //是否开启pulse模式
-    private pulseCanvas: pulseCanvas | undefined;
+    private pulseCanvas: pulseCanvas | undefined
 
     constructor(args: {
         container: string | HTMLElement //容器 如果是dom节点就直接用没有的话生成
@@ -59,7 +62,7 @@ export default class galaxyvis extends Graph {
         renderer?: string // 渲染类型
     }) {
         super()
-        let id = this.id = 'graph' + genID(0)
+        let id = (this.id = 'graph' + genID(0))
         // option下args属性拆分加载
         const canvasBox = this.initArgs(args)
         if (this.renderer === 'webgl') {
@@ -70,23 +73,36 @@ export default class galaxyvis extends Graph {
             if (!this.thumbnail) instancesGL[id] = this
             // 加载Programs
             this.initPrograms()
-        } else {
+        } else if (this.renderer === 'canvas') {
             // 获取2d画布
             this.createCanvasContext(canvasBox, args.options as Options)
             // 加载相机
             this.camera = new Camera(id, this.ctx, this.events, this.thumbnail)
             // 挂载
             this.initCanvasRender()
+        } else {
+            // 获取webgpu上下文
+            this.gpu = this.createWebGPUContext(canvasBox, args.options as Options).then(() => {
+                this.camera = new Camera(id, this.gpu.context, this.events, this.thumbnail)
+                // init
+                this.initGPURender()
+                // 加载公用监听事件
+                this.initEventListener(canvasBox)
+                this.initContainerListener()
+                // 加载captors_mouse;
+                this.mouseCaptor = new CaptorsMouse(this, this.camera, canvasBox)
+            })
         }
+
         // 加载父级容器监听事件
-        if (!this.thumbnail) {
+        if (!this.thumbnail && this.camera) {
             // 加载公用监听事件
             this.initEventListener(canvasBox)
             this.initContainerListener()
             // 加载captors_mouse;
             this.mouseCaptor = new CaptorsMouse(this, this.camera, canvasBox)
             globalInfo[id].canvasBox = canvasBox
-        } else {
+        } else if (this.thumbnail) {
             this.mouseCaptor = null
             thumbnailInfo[id] = this
         }
@@ -105,13 +121,13 @@ export default class galaxyvis extends Graph {
                     style: item?.style,
                     scale: item?.scale,
                     font: item?.font,
-                    color: item?.color
+                    color: item?.color,
                 })
             })
         }
         // 初始化pulse并开启自循环
         if (this.pulse) {
-            const pulseCtx = this.pulseCanvas = new pulseCanvas(this)
+            const pulseCtx = (this.pulseCanvas = new pulseCanvas(this))
             pulseCtx.render()
         }
     }
@@ -119,8 +135,13 @@ export default class galaxyvis extends Graph {
     private initArgs(args: any) {
         // 获取当前的render类型 默认为webgl
         this.renderer = args.renderer || 'webgl'
-        // 是否支持webgl
-        let supported;
+        // 是否支持webgpu
+        // 做降级处理webgpu->webgl->canvas
+        let supported
+        if (this.renderer == 'webgpu') {
+            supported = CheckWebGPU()
+            supported ? (this.renderer = 'webgpu') : (this.renderer = 'webgl')
+        }
         if (this.renderer === 'webgl') {
             supported = isWebGLSupported()
             supported ? (this.renderer = 'webgl') : (this.renderer = 'canvas')
@@ -136,8 +157,8 @@ export default class galaxyvis extends Graph {
                 height: 0,
             }
         } else {
-            this.thumbnail = false;
-            let id = this.id;
+            this.thumbnail = false
+            let id = this.id
             basicData[id] = cloneDeep(basieciDataSetting)
             originInfo[id] = cloneDeep(originInfoSetting)
             globalInfo[id] = cloneDeep(globalInfoSetting)
@@ -285,6 +306,33 @@ export default class galaxyvis extends Graph {
         }
         return this.ctx
     }
+    // 获取webgpu上下文
+    private async createWebGPUContext(
+        canvasBox: HTMLCanvasElement,
+        options: Options,
+    ): Promise<any> {
+        // 清理画布
+        if (options?.backgroundColor) {
+            globalInfo[this.id].backgroundColor = {
+                floatColor: floatColor(options.backgroundColor).rgb,
+                color: options.backgroundColor,
+            }
+            this.divContainer!.style.backgroundColor = options.backgroundColor
+        }
+        let webgpu = canvasBox.getContext('webgpu') as any
+        let canvas: HTMLCanvasElement = webgpu.canvas as HTMLCanvasElement,
+            width = canvasBox.clientWidth || canvasBox.offsetWidth,
+            height = canvasBox.clientHeight || canvasBox.offsetHeight
+        // 设置宽高
+        if (window.devicePixelRatio) {
+            canvas.style.width = width + 'px'
+            canvas.style.height = height + 'px'
+            canvas.height = height * window.devicePixelRatio
+            canvas.width = width * window.devicePixelRatio
+        }
+        this.gpu = await InitGPU(canvas)
+        return this.gpu
+    }
     // 生成canvas
     private setContainer(container: string | HTMLElement, pulse: any): HTMLCanvasElement {
         var divContainer
@@ -302,19 +350,19 @@ export default class galaxyvis extends Graph {
         // 添加节点到dom
         let width = divContainer.clientWidth || divContainer.offsetWidth,
             height = divContainer.clientHeight || divContainer.offsetHeight
-        const canvasBox = document.createElement('canvas');
-        canvasBox.width = width;
-        canvasBox.height = height;
-        canvasBox.style.position = "absolute";
+        const canvasBox = document.createElement('canvas')
+        canvasBox.width = width
+        canvasBox.height = height
+        canvasBox.style.position = 'absolute'
 
         // pulse
         if (pulse) {
             const pulsePass = document.createElement('canvas')
-            pulsePass.width = width;
-            pulsePass.height = height;
-            pulsePass.style.position = "absolute";
-            pulsePass.id = "pulse_" + this.id;
-            divContainer.appendChild(pulsePass);
+            pulsePass.width = width
+            pulsePass.height = height
+            pulsePass.style.position = 'absolute'
+            pulsePass.id = 'pulse_' + this.id
+            divContainer.appendChild(pulsePass)
         }
 
         divContainer.appendChild(canvasBox)
@@ -361,10 +409,8 @@ export default class galaxyvis extends Graph {
     // 订阅发布
     private initListener(): void {
         this.events.on('camerarefresh', (viewChange: boolean = false, refesh: boolean = false) => {
-            if (refesh)
-                this.render()
-            else
-                this.camerarefresh(viewChange)
+            if (refesh) this.render()
+            else this.camerarefresh(viewChange)
         })
         event.listen('renderCanvas', (GraphId: string) => {
             if (GraphId == this.id) {
@@ -382,11 +428,13 @@ export default class galaxyvis extends Graph {
     public resize(): void {
         try {
             let gl = this.gl
-            let canvas: HTMLCanvasElement = (this.renderer === 'webgl' ? gl.canvas : this.ctx.canvas) as HTMLCanvasElement,
+            let canvas: HTMLCanvasElement = (
+                    this.renderer === 'webgl' ? gl.canvas : this.ctx.canvas
+                ) as HTMLCanvasElement,
                 container: HTMLElement = this.divContainer as HTMLElement,
                 width = getContainerWidth(container),
                 height = getContainerHeight(container)
-            let id = this.id;
+            let id = this.id
             if (!width || !height) return
 
             if (this.renderer === 'webgl') {
@@ -411,7 +459,7 @@ export default class galaxyvis extends Graph {
                         drawText(size, str, maxLength, style)
                     }
                 }
-            } else {
+            } else if (this.renderer === 'canvas') {
                 // 设置宽高
                 if (window.devicePixelRatio && !this.thumbnail) {
                     canvas.style.width = width + 'px'
@@ -419,6 +467,7 @@ export default class galaxyvis extends Graph {
                     canvas.height = height
                     canvas.width = width
                 }
+            } else {
             }
 
             if (globalInfo[id].thumbnail && this.thumbnail) {
@@ -430,32 +479,24 @@ export default class galaxyvis extends Graph {
             }
             // 重新渲染pulse
             if (this.pulse) {
-                this.resizeLayers(
-                    width, height,
-                    "pulse_" + id, "pulse"
-                )
+                this.resizeLayers(width, height, 'pulse_' + id, 'pulse')
             }
             if (this.overLay) {
-                this.resizeLayers(
-                    width, height,
-                    "overlayPass_" + id, "overlay"
-                )
+                this.resizeLayers(width, height, 'overlayPass_' + id, 'overlay')
             }
-        } catch { }
+        } catch {}
     }
 
-    private resizeLayers(
-        width: number, height: number, id: string, type: string
-    ) {
-        const pass = document.getElementById(id) as HTMLCanvasElement;
-        pass.width = width;
-        pass.height = height;
+    private resizeLayers(width: number, height: number, id: string, type: string) {
+        const pass = document.getElementById(id) as HTMLCanvasElement
+        pass.width = width
+        pass.height = height
         pass.style.width = width + 'px'
         pass.style.height = height + 'px'
-        if (type == "pulse") {
-            this.pulseCanvas!.stop();
+        if (type == 'pulse') {
+            this.pulseCanvas!.stop()
             this.pulseCanvas!.render()
-        } else if (type == "overlay") {
+        } else if (type == 'overlay') {
             this.overLay.stop()
             this.overLay.render()
         }
@@ -480,20 +521,24 @@ export default class galaxyvis extends Graph {
         this.edgeProgram = new edgeCanvas(this)
         this.haloProgram = new haloCanvas(this)
     }
+    private initGPURender(): void {
+        this.nodeProgram = new NodeGPUProgram(this)
+    }
 
     // 清理缓冲区和图片缓存
     public clear(): void {
         if (this.renderer == 'webgl') {
             const textureCtx = globalProp.textureCtx as CanvasRenderingContext2D
-            textureCtx && textureCtx.clearRect(0, 0, textureCtx.canvas.width, textureCtx.canvas.height)
+            textureCtx &&
+                textureCtx.clearRect(0, 0, textureCtx.canvas.width, textureCtx.canvas.height)
             this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT)
             if (thumbnailInfo[this.id]) {
                 thumbnailInfo[this.id].gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT)
             }
-            ; (this.nodeProgram as nodeProgram).clear()
-                ; (this.textProgram as sdfTextProgram).clear()
-                ; (this.edgeProgram as edgeProgram).clear()
-                ; (this.haloProgram as haloProgram).clear()
+            ;(this.nodeProgram as nodeProgram).clear()
+            ;(this.textProgram as sdfTextProgram).clear()
+            ;(this.edgeProgram as edgeProgram).clear()
+            ;(this.haloProgram as haloProgram).clear()
         } else {
             this.clearCanvas()
         }
@@ -510,7 +555,7 @@ export default class galaxyvis extends Graph {
 
     // 更新渲染
     public async camerarefresh(viewChange: boolean = false): Promise<void> {
-        let GraphId = this.id;
+        let GraphId = this.id
         if (!basicData[GraphId]) {
             return void 0
         }
@@ -526,50 +571,49 @@ export default class galaxyvis extends Graph {
         const that = this
         const showText = this.textStatus
 
-        if (this.frameId && this.renderType == "camera") {
-            cancelFrame(this.frameId);
-            this.frameId = null;
+        if (this.frameId && this.renderType == 'camera') {
+            cancelFrame(this.frameId)
+            this.frameId = null
         }
         this.frameId = requestFrame(tickFrame)
 
         var strategies: { [key: string]: Function } = {
             0: () => {
-                if (!that.fast)
-                    (that.haloProgram as haloProgram).refreshProcess();
+                if (!that.fast) (that.haloProgram as haloProgram).refreshProcess()
             },
             1: () => {
-                (that.edgeProgram as edgeProgram).refreshProcess();
+                ;(that.edgeProgram as edgeProgram).refreshProcess()
             },
             2: () => {
                 if (showText && !this.thumbnail)
-                    (that.textProgram as sdfTextProgram).refreshProcessEdge();
+                    (that.textProgram as sdfTextProgram).refreshProcessEdge()
             },
             3: () => {
-                (that.nodeProgram as nodeProgram).refreshProcess();
+                ;(that.nodeProgram as nodeProgram).refreshProcess()
             },
             4: () => {
                 if (showText && !this.thumbnail)
-                    (that.textProgram as sdfTextProgram).refreshProcess();
+                    (that.textProgram as sdfTextProgram).refreshProcess()
             },
         }
         let i = 0
         function tickFrame() {
             if (!basicData[GraphId]) {
-                cancelFrame(that.frameId);
-                that.frameId = null;
+                cancelFrame(that.frameId)
+                that.frameId = null
                 return void 0
             }
             gl.clear(gl.COLOR_BUFFER_BIT)
             do {
                 strategies[i++]()
-                if (i == 4) that.renderType = "camera"
+                if (i == 4) that.renderType = 'camera'
             } while (i < 5)
             if (i === 5 && viewChange) that.debounce()
         }
     }
     // 单个或者少许更新
     public async selectMovefresh(boolean: boolean = false): Promise<void> {
-        let GraphId = this.id;
+        let GraphId = this.id
         if (!basicData[GraphId]) {
             return void 0
         }
@@ -590,50 +634,49 @@ export default class galaxyvis extends Graph {
         }
 
         if (this.frameId) {
-            cancelFrame(this.frameId);
-            this.frameId = null;
+            cancelFrame(this.frameId)
+            this.frameId = null
         }
         this.frameId = await requestFrame(tickFrame)
         var strategies: { [key: string]: Function } = {
             0: () => {
-                if (!that.fast)
-                    (that.haloProgram as haloProgram).moveProcess();
+                if (!that.fast) (that.haloProgram as haloProgram).moveProcess()
             },
             1: () => {
-                (that.edgeProgram as edgeProgram).process(true);
+                ;(that.edgeProgram as edgeProgram).process(true)
             },
             2: () => {
                 if (showText && !this.thumbnail)
-                    (that.textProgram as sdfTextProgram).moveProcessEdge();
+                    (that.textProgram as sdfTextProgram).moveProcessEdge()
             },
             3: () => {
-                (that.nodeProgram as nodeProgram).process();
+                ;(that.nodeProgram as nodeProgram).process()
             },
             4: () => {
                 if (showText && !this.thumbnail)
-                    (that.textProgram as sdfTextProgram).moveProcessNode();
+                    (that.textProgram as sdfTextProgram).moveProcessNode()
             },
         }
 
         let i = 0
         function tickFrame() {
             if (!basicData[GraphId]) {
-                cancelFrame(that.frameId);
-                that.frameId = null;
+                cancelFrame(that.frameId)
+                that.frameId = null
                 return void 0
             }
             gl.clear(gl.COLOR_BUFFER_BIT)
             do {
                 try {
                     strategies[i++]()
-                    if (i == 4) that.renderType = "partial"
-                } catch { }
+                    if (i == 4) that.renderType = 'partial'
+                } catch {}
             } while (i < 5)
         }
     }
     // 渲染
     public async render() {
-        let GraphId = this.id;
+        let GraphId = this.id
         if (!basicData[this.id]) {
             return void 0
         }
@@ -655,44 +698,48 @@ export default class galaxyvis extends Graph {
 
         var strategies: { [key: string]: Function } = {
             0: () => {
-                if (!that.fast)
-                    (that.haloProgram as haloProgram).process();
+                if (!that.fast) (that.haloProgram as haloProgram).process()
             },
             1: () => {
-                (that.edgeProgram as edgeProgram).process(false);
+                ;(that.edgeProgram as edgeProgram).process(false)
             },
             2: () => {
-                if (showText && !this.thumbnail) (that.textProgram as sdfTextProgram).processEdge();
+                if (showText && !this.thumbnail) (that.textProgram as sdfTextProgram).processEdge()
             },
             3: () => {
-                (that.nodeProgram as nodeProgram).process();
+                ;(that.nodeProgram as nodeProgram).process()
             },
             4: () => {
-                if (showText && !this.thumbnail) (that.textProgram as sdfTextProgram).processNode();
+                if (showText && !this.thumbnail) (that.textProgram as sdfTextProgram).processNode()
             },
         }
         if (this.frameId) {
-            cancelFrame(this.frameId);
-            this.frameId = null;
+            cancelFrame(this.frameId)
+            this.frameId = null
         }
         this.frameId = await requestFrame(processTask)
         let i = 0
         function processTask(then: number) {
             if (!basicData[GraphId]) {
-                cancelFrame(that.frameId);
-                that.frameId = null;
+                cancelFrame(that.frameId)
+                that.frameId = null
                 return void 0
             }
             gl.clear(gl.COLOR_BUFFER_BIT)
             do {
                 strategies[i++]()
-                if (i == 4) that.renderType = "total"
+                if (i == 4) that.renderType = 'total'
             } while (i < 5)
         }
     }
     // 渲染
     public async renderCanvas(boolean: boolean = true, viewChange: boolean = false) {
-        let GraphId = this.id;
+        let GraphId = this.id
+
+        if (this.renderer == 'webgpu') {
+            return this.webgpuRender()
+        }
+
         if (!basicData[GraphId] || this.renderer == 'webgl') {
             return void 0
         }
@@ -708,40 +755,92 @@ export default class galaxyvis extends Graph {
 
         var strategies: { [key: string]: Function } = {
             0: () => {
-                (that.haloProgram as haloCanvas).drawNodeHalo();
+                ;(that.haloProgram as haloCanvas).drawNodeHalo()
             },
             1: () => {
-                (that.edgeProgram as edgeCanvas).drawEdge(boolean, viewChange);
+                ;(that.edgeProgram as edgeCanvas).drawEdge(boolean, viewChange)
             },
             2: () => {
-                if (showText && !this.thumbnail) (that.textProgram as lableCanvas).drawEdgeLabel(viewChange);
+                if (showText && !this.thumbnail)
+                    (that.textProgram as lableCanvas).drawEdgeLabel(viewChange)
             },
             3: () => {
-                (that.nodeProgram as nodeCanvas).drawNode(boolean, viewChange);
+                ;(that.nodeProgram as nodeCanvas).drawNode(boolean, viewChange)
             },
             4: () => {
-                if (showText && !this.thumbnail) (that.textProgram as lableCanvas).drawNodeLabel(viewChange);
+                if (showText && !this.thumbnail)
+                    (that.textProgram as lableCanvas).drawNodeLabel(viewChange)
             },
         }
 
         let i = 0
         async function tickFrame(taskStartTime: number) {
             if (!basicData[GraphId]) {
-                cancelFrame(that.frameId);
-                that.frameId = null;
+                cancelFrame(that.frameId)
+                that.frameId = null
                 return void 0
             }
             that.clearCanvas()
             do {
                 await strategies[i++]()
-                if (i == 4) that.renderType = "canvastotal"
+                if (i == 4) that.renderType = 'canvastotal'
             } while (i < 5)
             if (i === 5 && viewChange) that.debounce()
         }
-        if (this.frameId && that.renderType === "canvastotal") {
-            cancelFrame(this.frameId);
-            this.frameId = null;
+        if (this.frameId && that.renderType === 'canvastotal') {
+            cancelFrame(this.frameId)
+            this.frameId = null
         }
         this.frameId = await requestFrame(tickFrame)
+    }
+
+    public async webgpuRender() {
+        if (!basicData[this.id]) {
+            return void 0
+        }
+
+        const { device, context } = this.gpu
+
+        const that = this
+
+        let commandEncoder, passEncoder
+
+        const renderPassDescriptor = {
+            colorAttachments: [
+                {
+                    view: undefined,
+                    // wtf? 透明背景如何设置
+                    clearValue: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
+                    loadOp: 'clear',
+                    storeOp: 'store',
+                },
+            ],
+        } as any
+
+        if (device) {
+            let textureView = context.getCurrentTexture().createView()
+
+            renderPassDescriptor.colorAttachments[0].view = textureView
+
+            commandEncoder = device.createCommandEncoder({})
+            passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
+
+            if(this.frameId) {
+                cancelFrame(this.frameId)
+                this.frameId = null
+            }
+
+            this.frameId = await requestFrame(tickFrame)
+        }
+
+        async function tickFrame() {
+            const queue = device.queue;
+            // 加载命令
+            (that.nodeProgram as NodeGPUProgram).render(passEncoder)
+
+            passEncoder.end()
+            // 向GPU发出命令
+            queue.submit([commandEncoder.finish()])
+        }
     }
 }

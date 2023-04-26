@@ -3,6 +3,12 @@ declare module '*.glsl' {
     export default value;
 }
 
+declare module '*.wgsl' {
+    const value: string;
+    export default value;
+}
+
+
 interface Window {
     XLSX: any;
     L: any;

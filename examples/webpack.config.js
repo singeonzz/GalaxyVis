@@ -31,10 +31,10 @@ const EXAMPLES = {
         id: "geo",
         title: "地图",
     },
-    // test_list: {
-    //     id: "test_list",
-    //     title: "测试",
-    // },
+    test_list: {
+        id: "test_list",
+        title: "测试",
+    },
 }
 
 const entry = {}
@@ -89,6 +89,11 @@ module.exports = {
                 test: /\.(?:glsl|gexf)$/,
                 exclude: /node_modules/,
                 loader: "raw-loader",
+            },
+            {
+                test: /\.wgsl$/i,
+                exclude: /node_modules/,
+                use: 'raw-loader',
             },
             {
                 test: /\.worker\.(c|m)?js$/i,

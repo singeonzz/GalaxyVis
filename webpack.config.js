@@ -10,6 +10,11 @@ const moduleConfig = {
       loader: "raw-loader",
     },
     {
+      test: /\.wgsl$/i,
+      exclude: /node_modules/,
+      use: 'raw-loader',
+    },
+    {
       test: /\.ts$/,
       exclude: /node_modules/,
       loader: "ts-loader",

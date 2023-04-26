@@ -2,6 +2,11 @@ import { mat4, vec3 } from 'gl-matrix'
 import { basicData, globalInfo, globalProp } from '../initial/globalProp'
 import { getX, getY, vectorAngle } from '../utils'
 import { QuadTree } from '../utils/quadTree'
+import { throttle } from 'lodash'
+
+const Throttle = throttle((events, viewChange) => {
+    events.emit('camerarefresh', viewChange)
+}, 16)
 
 class Camera {
     public gl: WebGLRenderingContext
@@ -56,8 +61,7 @@ class Camera {
         this.position = position
         this.thumbnail = thumbnail
         this.worldUp = worldUp
-        this.events = events;
-
+        this.events = events
         // @ts-ignore
         this.gl = gl
         this.Matrix = mat4.create()
@@ -92,7 +96,7 @@ class Camera {
      * 更新transfrom
      */
     updateTransform() {
-        let graphId = this.graphId;
+        let graphId = this.graphId
         let width = this.gl.canvas.width
         basicData[graphId].transform = width / globalProp.globalScale / this.aspectRatio
     }
@@ -176,7 +180,7 @@ class Camera {
             y,
             globalThumbnail = globalInfo[this.graphId].thumbnail,
             width = this.thumbnail ? globalThumbnail?.width : this.gl.canvas.width,
-            height = this.thumbnail ? globalThumbnail?.height : this.gl.canvas.height;
+            height = this.thumbnail ? globalThumbnail?.height : this.gl.canvas.height
         pointX = getX(e)
         pointY = getY(e)
         if (this.isMouseDown && this.renderer == 'webgl') {
@@ -204,7 +208,12 @@ class Camera {
             }
         }
         if (this.isMouseDown && this.mouseType == 3) {
-            const RANGLE = vectorAngle([pointX, pointY], [this.startMouseX, this.startMouseY], [width / 2, height / 2]) * 6
+            const RANGLE =
+                vectorAngle(
+                    [pointX, pointY],
+                    [this.startMouseX, this.startMouseY],
+                    [width / 2, height / 2],
+                ) * 6
             if (RANGLE !== 0) {
                 let Matrix = mat4.create()
                 mat4.rotateZ(Matrix, Matrix, RANGLE)
@@ -214,20 +223,17 @@ class Camera {
                     let { isVisible, x, y } = item.getAttribute()
                     if (isVisible) {
                         item.changeAttribute({
-                            x: (x) * Matrix[0] + (y) * Matrix[4],
-                            y: (x) * Matrix[1] + (y) * Matrix[5]
+                            x: x * Matrix[0] + y * Matrix[4],
+                            y: x * Matrix[1] + y * Matrix[5],
                         })
                     }
                 })
                 // Event.trigger('camerarefresh', false, true)
-                this.events.emit('camerarefresh', 
-                    false, true
-                )
+                this.events.emit('camerarefresh', false, true)
             }
             this.startMouseX = pointX
             this.startMouseY = pointY
         }
-
 
         if (e.preventDefault) e.preventDefault()
         else e.returnValue = false
@@ -251,10 +257,7 @@ class Camera {
     updateCameraVectors(viewChange: boolean = false) {
         this.cameraChange = true
         this.ratio = 2 * (this.position[2] * Math.tan((this.zoom * Math.PI) / 360))
-        // Event.trigger('camerarefresh', viewChange)
-        this.events.emit('camerarefresh', 
-            viewChange
-        )
+        Throttle(this.events, viewChange)
     }
 }
 
