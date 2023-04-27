@@ -369,7 +369,8 @@ export interface globalPropType {
     labelStore: PlainObject<any> //文字仓库
     direction: { [ke: string]: number[] } //badge位置
     textureCtx: CanvasRenderingContext2D | null //纹理canvas
-    edgeGroups: number
+    edgeGroups: number,
+    gpuTexture: any
 }
 
 export interface globalInfoData {

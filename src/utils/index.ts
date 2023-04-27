@@ -4,6 +4,8 @@ import { originInitial } from '../initial/originInitial'
 import { IBound, loopLineType } from '../types'
 import { getTextPixels } from './piexelsCreat'
 import { sdfCreate } from './tinySdf/sdfDrawText'
+import { GetTexture } from './webGPUtils'
+import { throttle } from 'lodash'
 
 /**
  * 颜色打包
@@ -122,10 +124,21 @@ export const initText = (that: any) => {
         sdfCreate(that, textSet, that.thumbnail)
     }
 }
+
+let textureThrottle = throttle((
+    that, device, textureCtx
+)=>{
+    GetTexture(device, textureCtx.canvas).then((data) =>{
+        globalProp.gpuTexture = data;
+        that.render()
+    });
+}, 16)
+
 // icon和image
 export const initIconOrImage = async (that: any, data: any) => {
-    if (that.renderer !== 'webgl' || that.fast) return
-    globalProp.useIniticon++
+    if (that.renderer == 'canvas' || that.fast) return
+    globalProp.useIniticon++;
+
     const atlas = globalProp.atlas,
         textureCtx = globalProp.textureCtx as CanvasRenderingContext2D
     const thumbnailGL = thumbnailInfo[that.id]
@@ -159,13 +172,13 @@ export const initIconOrImage = async (that: any, data: any) => {
         var img = new Image()
         img.crossOrigin = 'anonymous'
         // 当加载完图片再重新render
-        img.addEventListener('load', function () {
+        img.addEventListener('load', async function () {
             try {
                 let scaleNum = 128 * (data?.scale || 1) * 0.9;
                 imageCanvasContext.drawImage(img, (128 - scaleNum) / 2, (128 - scaleNum) / 2, scaleNum, scaleNum)
                 textureInfo.pixels = imageCanvasContext.getImageData(0, 0, 128, 128)
                 textureCtx?.putImageData(textureInfo.pixels, textureInfo.x, textureInfo.y)
-                if (Object.keys(instancesGL).length > 0) {
+                if (Object.keys(instancesGL).length > 0 && that.renderer == 'webgl') {
                     for (let i in instancesGL) {
                         let gl = instancesGL[i].gl
                         initGlTextureBind(gl, gl.TEXTURE0, gl.createTexture(), textureCtx)
@@ -175,14 +188,22 @@ export const initIconOrImage = async (that: any, data: any) => {
                         initGlTextureBind(gl, gl.TEXTURE0, gl.createTexture(), textureCtx)
                     }
                 }
-                that.render()
+
+                if (that.renderer == "webgpu"){
+                    let device = that.gpu.device;
+                    textureThrottle(that, device, textureCtx)
+                }else{
+                    that.render()
+                }
+
             } catch (err) {
                 console.warn(err, 'err')
             }
         })
         img.src = url
     }
-    if (Object.keys(instancesGL).length > 0) {
+    
+    if (Object.keys(instancesGL).length > 0 && that.renderer == 'webgl') {
         for (let i in instancesGL) {
             let gl = instancesGL[i].gl
             initGlTextureBind(gl, gl.TEXTURE0, gl.createTexture(), textureCtx)
@@ -192,7 +213,12 @@ export const initIconOrImage = async (that: any, data: any) => {
             initGlTextureBind(gl, gl.TEXTURE0, gl.createTexture(), textureCtx)
         }
     }
-    if (that.thumbnail === false) that.render()
+
+    if (that.renderer == "webgpu"){
+        let device = that.gpu.device;
+        textureThrottle(that, device, textureCtx)
+    }
+    else if (that.thumbnail === false) that.render()
 }
 
 /**

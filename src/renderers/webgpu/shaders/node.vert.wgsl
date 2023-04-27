@@ -11,6 +11,9 @@ struct Uniforms {
         color: u32,
         strokeWidth: f32,
         strokeColor: u32,
+        iconType: f32,
+        uvx:f32,
+        uvy:f32,
     }
 @binding(0) @group(0) var<uniform> uniforms: Uniforms;
 
@@ -27,7 +30,9 @@ struct outPut {
     @location(0) vCoord: vec2<f32>,
     @location(1) vColor: vec4<f32>,
     @location(2) vStrokeWidth: f32,
-    @location(3) vStrokeColor: vec4<f32>
+    @location(3) vStrokeColor: vec4<f32>,
+    @location(4) vUV: vec2<f32>,
+    @location(5) uIconType: f32
 }
 
 // 顶点着色器入口
@@ -46,7 +51,6 @@ fn vert_main(
     var output: outPut;
     // 将顶点数据写入片元着色器
     output.vCoord = coord;
-    // output.Position = vec4(xpos, ypos, 0.0, 1.0);
     output.Position = mats.projection * mats.aXformMatrix * vec4(xpos, ypos, 0.0, 1.0);
     
     // 解压主体颜色
@@ -66,6 +70,10 @@ fn vert_main(
     output.vStrokeColor = vec4<f32>(sr, sg, sb, sa);
 
     output.vStrokeWidth = uniforms.strokeWidth;
+
+    output.uIconType = uniforms.iconType;
+    // output.vUV = coord;
+    output.vUV = coord /32. + vec2(uniforms.uvx, uniforms.uvy);
 
     return output;
 }

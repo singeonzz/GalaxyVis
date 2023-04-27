@@ -1,3 +1,5 @@
+import { globalProp } from "../initial/globalProp";
+
 /**
  * 初始化WebGPU
  * @returns
@@ -66,3 +68,55 @@ export const CreateGPUBuffer = (
     buffer.unmap();
     return buffer;
 };
+
+/**
+ * 加载纹理
+ * @param device 
+ * @param imageName 
+ * @param addressModeU 
+ * @param addressModeV 
+ * @returns 
+ */
+export const GetTexture = async(
+    device: GPUDevice, 
+    htc: HTMLCanvasElement,
+    addressModeU = 'repeat',
+    addressModeV = 'repeat'
+) => {
+    // 获取图片
+    // const img = document.createElement('img');
+    // img.src = '../../public/img/sky.jpg';
+
+    // await img.decode();
+
+    const imageBitmap = await createImageBitmap(htc);
+
+    // 创建GPUSampler,它控制着着色器如何转换和过滤纹理资源数据
+    const sampler = device.createSampler({
+        minFilter: 'linear',
+        magFilter: 'linear',
+        addressModeU: addressModeU as GPUAddressMode,
+        addressModeV: addressModeV as GPUAddressMode
+    });       
+
+    // 创建纹理
+    const texture = device.createTexture({
+        size: [imageBitmap.width, imageBitmap.height, 1],
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | 
+               GPUTextureUsage.COPY_DST | 
+               GPUTextureUsage.RENDER_ATTACHMENT
+    });
+    // 将从源图像、视频或画布中获取的快照复制到给定的GPUTexture.
+    // 
+    device.queue.copyExternalImageToTexture(
+        { source: imageBitmap, flipY: true },
+        { texture: texture },
+        [imageBitmap.width, imageBitmap.height]
+    );
+
+    return {
+        texture,
+        sampler
+    }
+}

@@ -30,6 +30,7 @@ export const globalProp: globalPropType = {
         topRight: [1, -1],
     }, //badge位置
     edgeGroups: 41, //绘制一个曲线需要多少控制点
+    gpuTexture: null
 }
 
 export const ANIMATE_DEFAULTS = {

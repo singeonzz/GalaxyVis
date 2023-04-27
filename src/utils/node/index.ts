@@ -411,7 +411,7 @@ export const nodeInitAttribute = (that: any, attribute: any, useSet: boolean = f
             }
         }
     }
-    if (that.renderer === 'webgl') initWebglAttribute(that, attribute)
+    if (that.renderer !== 'canvas') initWebglAttribute(that, attribute)
     return attribute
 }
 

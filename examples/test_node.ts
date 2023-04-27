@@ -2,7 +2,7 @@ import galaxyvis from "../src/galaxyVis";
 import * as dat from 'dat.gui';
 
 let iconStore = {
-    "icon1": "\ue789",
+    "icon1": "\ue63a",
     "icon2": "\ue791",
     "icon3": "\ue795"
 }
@@ -72,7 +72,7 @@ let badgesObject = {
 
 let galaxyVis = new galaxyvis({
     container: 'container',
-    renderer: "canvas"
+    renderer: "webgl"
 })
 
 let galaxyVis2 = new galaxyvis({

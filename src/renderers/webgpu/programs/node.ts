@@ -1,11 +1,11 @@
 import nodeVert from '../shaders/node.vert.wgsl'
 import nodeFrag from '../shaders/node.frag.wgsl'
-import { CreateGPUBuffer } from '../../../utils/webGPUtils'
+import { CreateGPUBuffer, GetTexture } from '../../../utils/webGPUtils'
 import { basicData, globalProp } from '../../../initial/globalProp'
 import { coordTransformation, newfloatColor } from '../../../utils'
 import { mat4, glMatrix } from 'gl-matrix'
 
-const ATTRIBUTES = 6
+const ATTRIBUTES = 9
 
 export default class NodeGPUProgram {
     private gpu: {
@@ -21,6 +21,10 @@ export default class NodeGPUProgram {
     private matsBindGroupLayout: GPUBindGroupLayout
     private pipeline: GPURenderPipeline
     private isInit = true
+    private ts: { 
+        texture: GPUTexture; 
+        sampler: GPUSampler 
+    }
 
     constructor(graph: any) {
         this.graph = graph
@@ -28,7 +32,7 @@ export default class NodeGPUProgram {
         this.maxMappingLength = (14 * 1024 * 1024) / Float32Array.BYTES_PER_ELEMENT
     }
 
-    initPineLine() {
+    async initPineLine() {
         const { device, format } = this.gpu
 
         const bindGroupLayout = this.bindGroupLayout = device.createBindGroupLayout({
@@ -54,6 +58,19 @@ export default class NodeGPUProgram {
                         minBindingSize: 64 * 2,
                     },
                 },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    sampler: {},
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.FRAGMENT,
+                    texture: { 
+                        sampleType: "float", 
+                        viewDimension: "2d" 
+                    },
+                }, 
             ],
         })
 
@@ -125,11 +142,17 @@ export default class NodeGPUProgram {
         })
 
         this.isInit = false
+
+        this.ts = globalProp.gpuTexture
     }
 
-    render(passEncoder: any) {
+    async render(passEncoder: any) {
 
-        this.isInit && this.initPineLine()
+        this.isInit && await this.initPineLine()
+
+        this.ts = globalProp.gpuTexture
+
+        if(!this.ts) return;
 
         const graph = this.graph
 
@@ -166,8 +189,16 @@ export default class NodeGPUProgram {
 
         const bindGroups = new Array(numTriangles)
 
+        const atlas = globalProp.atlas
+        const iconMap = globalProp.iconMap
+        const wid = 128
+
         nodes.forEach((item, i) => {
-            let { x, y, radius, color, innerStroke, isSelect } = item.getAttribute()
+            let { 
+                x, y, radius, color, 
+                innerStroke, isSelect,image,
+                icon 
+            } = item.getAttribute()
 
             let zoomResults: number = Math.ceil((radius / globalProp.standardRadius) * 1e2) / 1e3
 
@@ -177,6 +208,17 @@ export default class NodeGPUProgram {
 
             let strokeWidth = (Number(innerStroke?.width) >= 0 ? innerStroke.width : 2) / 1e2
 
+            let iconNum: number = image.url ? iconMap.get(image.url + color)?.num : iconMap.get(icon.content)?.num
+    
+            let iconType = image.url ? 1 : icon.content != '' ? 2 : 3
+
+            if (!iconNum) {
+                iconNum = 0
+            }
+
+            let uv_x = ((wid * iconNum) % (wid * atlas)) / (wid * atlas),
+                uv_y = 1 - (wid + wid * Math.floor(iconNum / atlas)) / (wid * atlas);
+            
             let strokeColor
             if (isSelect) {
                 strokeColor = newfloatColor(innerStroke?.selectedColor || innerStroke || '#fff')
@@ -190,6 +232,12 @@ export default class NodeGPUProgram {
             uniformBufferData[alignedUniformFloats * i + 3] = colorFloat // floatColor
             uniformBufferData[alignedUniformFloats * i + 4] = strokeWidth // StrokeWidth
             uniformBufferData[alignedUniformFloats * i + 5] = strokeColor // StrokeColor
+
+            uniformBufferData[alignedUniformFloats * i + 6] = iconType // iconType
+
+            uniformBufferData[alignedUniformFloats * i + 7] = uv_x // uv_x
+            uniformBufferData[alignedUniformFloats * i + 8] = uv_y // uv_y
+
 
             bindGroups[i] = device.createBindGroup({
                 layout: this.bindGroupLayout,
@@ -225,7 +273,15 @@ export default class NodeGPUProgram {
                         offset: matOffset,
                         size: 64 * 2,
                     },
+                }, 
+                {
+                    binding: 1,
+                    resource: this.ts.sampler
                 },
+                {
+                    binding: 2,
+                    resource: this.ts.texture.createView()
+                }    
             ],
         })
 

@@ -30,9 +30,9 @@ import {
     requestFrame,
     wheelFunction,
 } from './utils'
-import { cloneDeep, get, has, debounce, merge } from 'lodash'
+import { cloneDeep, get, has, debounce, merge, throttle } from 'lodash'
 import pulseCanvas from './renderers/canvas/pulse'
-import { CheckWebGPU, InitGPU } from './utils/webGPUtils'
+import { CheckWebGPU, GetTexture, InitGPU } from './utils/webGPUtils'
 import NodeGPUProgram from './renderers/webgpu/programs/node'
 
 export default class galaxyvis extends Graph {
@@ -91,6 +91,18 @@ export default class galaxyvis extends Graph {
                 this.initContainerListener()
                 // 加载captors_mouse;
                 this.mouseCaptor = new CaptorsMouse(this, this.camera, canvasBox)
+                // 加载
+                globalProp.iconMap.forEach((item, key) => {
+                    initIconOrImage(this, {
+                        key: item.key,
+                        type: item.type,
+                        num: item.num,
+                        style: item?.style,
+                        scale: item?.scale,
+                        font: item?.font,
+                        color: item?.color,
+                    })
+                })
             })
         }
 
@@ -331,6 +343,25 @@ export default class galaxyvis extends Graph {
             canvas.width = width * window.devicePixelRatio
         }
         this.gpu = await InitGPU(canvas)
+        
+        // 获取图片的上下文
+        if (!globalProp.textureCtx) {
+            globalProp.textureCtx = document
+                .createElement('canvas')
+                .getContext('2d') as CanvasRenderingContext2D
+            let atlas = globalProp.atlas,
+                spriteAtlasWidth = 128 * atlas,
+                spriteAtlasHeight = 128 * atlas,
+                textureCtx = globalProp.textureCtx
+            textureCtx.canvas.width = spriteAtlasWidth
+            textureCtx.canvas.height = spriteAtlasHeight
+
+        }
+        let textureCtx = globalProp.textureCtx
+        if (!textureCtx) {
+            throw new Error('初始化canvas失败')
+        }
+
         return this.gpu
     }
     // 生成canvas
@@ -794,6 +825,10 @@ export default class galaxyvis extends Graph {
         this.frameId = await requestFrame(tickFrame)
     }
 
+    private tr = throttle(()=>{
+        
+    }, 16)
+
     public async webgpuRender() {
         if (!basicData[this.id]) {
             return void 0
@@ -803,7 +838,7 @@ export default class galaxyvis extends Graph {
 
         const that = this
 
-        let commandEncoder, passEncoder
+        let commandEncoder, passEncoder, textureView;
 
         const renderPassDescriptor = {
             colorAttachments: [
@@ -817,26 +852,27 @@ export default class galaxyvis extends Graph {
             ],
         } as any
 
+        if (this.frameId) {
+            cancelFrame(this.frameId);
+            this.frameId = null;
+            textureView = null;
+        }
+
         if (device) {
-            let textureView = context.getCurrentTexture().createView()
+            textureView = await context.getCurrentTexture().createView()
 
             renderPassDescriptor.colorAttachments[0].view = textureView
 
             commandEncoder = device.createCommandEncoder({})
             passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
 
-            if(this.frameId) {
-                cancelFrame(this.frameId)
-                this.frameId = null
-            }
-
-            this.frameId = await requestFrame(tickFrame)
+            this.frameId = requestFrame(tickFrame)
         }
 
         async function tickFrame() {
-            const queue = device.queue;
+            const queue = device.queue
             // 加载命令
-            (that.nodeProgram as NodeGPUProgram).render(passEncoder)
+            await (that.nodeProgram as NodeGPUProgram).render(passEncoder)
 
             passEncoder.end()
             // 向GPU发出命令
