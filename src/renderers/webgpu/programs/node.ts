@@ -1,6 +1,6 @@
 import nodeVert from '../shaders/node.vert.wgsl'
 import nodeFrag from '../shaders/node.frag.wgsl'
-import { CreateGPUBuffer, GetTexture } from '../../../utils/webGPUtils'
+import { CreateGPUBuffer } from '../../../utils/webGPUtils'
 import { basicData, globalProp } from '../../../initial/globalProp'
 import { coordTransformation, newfloatColor } from '../../../utils'
 import { mat4, glMatrix } from 'gl-matrix'
@@ -17,14 +17,14 @@ export default class NodeGPUProgram {
 
     private graph: any
     private maxMappingLength: number
-    private bindGroupLayout: GPUBindGroupLayout
-    private matsBindGroupLayout: GPUBindGroupLayout
-    private pipeline: GPURenderPipeline
+    private bindGroupLayout: GPUBindGroupLayout | undefined
+    private matsBindGroupLayout: GPUBindGroupLayout | undefined
+    private pipeline: GPURenderPipeline | undefined
     private isInit = true
     private ts: { 
         texture: GPUTexture; 
         sampler: GPUSampler 
-    }
+    } | undefined
 
     constructor(graph: any) {
         this.graph = graph
@@ -193,7 +193,7 @@ export default class NodeGPUProgram {
         const iconMap = globalProp.iconMap
         const wid = 128
 
-        nodes.forEach((item, i) => {
+        nodes.forEach((item: any, i: number) => {
             let { 
                 x, y, radius, color, 
                 innerStroke, isSelect,image,
@@ -240,7 +240,7 @@ export default class NodeGPUProgram {
 
 
             bindGroups[i] = device.createBindGroup({
-                layout: this.bindGroupLayout,
+                layout: this.bindGroupLayout as GPUBindGroupLayout,
                 entries: [
                     {
                         binding: 0,
@@ -264,7 +264,7 @@ export default class NodeGPUProgram {
         const view = camera.getViewMatrix()
         const matOffset = numTriangles * alignedUniformBytes
         const uniformMatBindGroup = device.createBindGroup({
-            layout: this.matsBindGroupLayout,
+            layout: this.matsBindGroupLayout as GPUBindGroupLayout,
             entries: [
                 {
                     binding: 0,
@@ -311,5 +311,6 @@ export default class NodeGPUProgram {
 
             passEncoder.draw(6)
         }
+        // passEncoder.drawIndexed(6);
     }
 }

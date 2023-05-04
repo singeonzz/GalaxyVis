@@ -33,15 +33,16 @@ const testEvent = () => {
         '#9DB09E',
         '#F8C821',
     ]
-    const drawNum = 100
+    const drawNum = 5
     let arr = new Array()
     let num = Math.floor(Math.sqrt(drawNum) + 0.5)
+    let line = new Array()
     for (let i = 0; i < drawNum; i++) {
         arr[i] = {
             id: `n${i}`,
             attribute: {
-                x: (i % num) * 100 - 400,
-                y: Math.floor(i / num) * 100 - 400,
+                x: (i % num) * 400 - 300,
+                y: Math.floor(i / num) * 200 - 100,
                 color: colors[Math.floor(Math.random() * colors.length) || 0],
                 // text: `n${i}`,
                 innerStroke: {
@@ -49,20 +50,34 @@ const testEvent = () => {
                     color: colors[Math.floor(Math.random() * colors.length) || 0],
                 },
                 icon: {
-                    content: k3[i%4],
+                    content: k3[i%3],
                     font: "iconfont"
                 },
-                image: {
-                    url: i % 4 == 3 ? imgs[0] : "",
-                },
+
             },
         }
+
+        i != drawNum -1 && (line[i] = {
+            source: `n${i}`,
+            target: `n${i + 1}`,
+            attribute: {
+                color: colors[Math.floor(Math.random() * colors.length) || 0],
+            }
+        })
     }
     
+    line.push({
+        source: 'n0',
+        target: 'n1',
+        attribute: {
+            width: 1.2
+        }
+    })
+
     galaxyVis.gpu.then(()=>{
         galaxyVis.addGraph({
             nodes: arr,
-            // edges: line
+            edges: line
         }).then(()=>{
             // galaxyVis.layouts.force({})
         })
