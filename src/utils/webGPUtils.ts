@@ -70,6 +70,27 @@ export const CreateGPUBuffer = (
 };
 
 /**
+ * 创建GPUBuffer u32
+ * @param device 
+ * @param data 
+ * @param usageFlag 
+ * @returns 
+ */
+export const CreateGPUBufferUint = (
+    device: GPUDevice, 
+    data: Uint32Array, 
+    usageFlag = GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST) => {
+    const buffer = device.createBuffer({
+        size: data.byteLength,
+        usage: usageFlag,
+        mappedAtCreation: true
+    });
+    new Uint32Array(buffer.getMappedRange()).set(data);
+    buffer.unmap();
+    return buffer;
+};
+
+/**
  * 加载纹理
  * @param device 
  * @param imageName 
@@ -83,12 +104,6 @@ export const GetTexture = async(
     addressModeU = 'repeat',
     addressModeV = 'repeat'
 ) => {
-    // 获取图片
-    // const img = document.createElement('img');
-    // img.src = '../../public/img/sky.jpg';
-
-    // await img.decode();
-
     const imageBitmap = await createImageBitmap(htc);
 
     // 创建GPUSampler,它控制着着色器如何转换和过滤纹理资源数据

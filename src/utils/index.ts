@@ -118,7 +118,7 @@ export const genID = (length: number) => {
 
 // 文字集
 export const initText = (that: any) => {
-    if (that.renderer !== 'webgl') return
+    if (that.renderer == 'canvas') return
     const textSet = globalProp.textSet
     if (textSet.size) {
         sdfCreate(that, textSet, that.thumbnail)

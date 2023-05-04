@@ -33,7 +33,7 @@ const testEvent = () => {
         '#9DB09E',
         '#F8C821',
     ]
-    const drawNum = 5
+    const drawNum = 10000
     let arr = new Array()
     let num = Math.floor(Math.sqrt(drawNum) + 0.5)
     let line = new Array()
@@ -44,7 +44,7 @@ const testEvent = () => {
                 x: (i % num) * 400 - 300,
                 y: Math.floor(i / num) * 200 - 100,
                 color: colors[Math.floor(Math.random() * colors.length) || 0],
-                // text: `n${i}`,
+                text: `n${i}`,
                 innerStroke: {
                     width: 2.0,
                     color: colors[Math.floor(Math.random() * colors.length) || 0],
@@ -57,13 +57,13 @@ const testEvent = () => {
             },
         }
 
-        i != drawNum -1 && (line[i] = {
-            source: `n${i}`,
-            target: `n${i + 1}`,
-            attribute: {
-                color: colors[Math.floor(Math.random() * colors.length) || 0],
-            }
-        })
+        // i != drawNum -1 && (line[i] = {
+        //     source: `n${i}`,
+        //     target: `n${i + 1}`,
+        //     attribute: {
+        //         color: colors[Math.floor(Math.random() * colors.length) || 0],
+        //     }
+        // })
     }
     
     line.push({
@@ -79,7 +79,7 @@ const testEvent = () => {
             nodes: arr,
             edges: line
         }).then(()=>{
-            // galaxyVis.layouts.force({})
+            // galaxyVis.layouts.force({duration: 1500})
         })
     })
 

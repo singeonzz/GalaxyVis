@@ -3,6 +3,7 @@ import { coordTransformation, floatColor, initGlTextureBind } from '..'
 import tinySDF from '.'
 import { basicData, globalInfo, globalProp, instancesGL } from '../../initial/globalProp'
 import throttle from 'lodash/throttle'
+import { GetTexture } from '../webGPUtils'
 
 const pMatrix = mat4.create()
 const mvMatrix = mat4.create()
@@ -45,8 +46,10 @@ export const clearGraphChars = (id: string) => {
 
 export const sdfCreate = (graph: any, textSet: Set<any>, thumbnail: boolean = false) => {
     if (thumbnail) return
+    
+    let renderType = graph.renderer;
 
-    let gl = graph.gl
+    let gl = renderType === "webgl" ? graph.gl : graph.gpu
     if (flag) {
         glWidth = gl.canvas.width || 800
         glHeight = gl.canvas.height || 800
@@ -59,7 +62,10 @@ export const sdfCreate = (graph: any, textSet: Set<any>, thumbnail: boolean = fa
         sdfCtx.canvas.height = Math.floor(atlas * 64)
     }
 
-    const texture = gl.createTexture()
+    let texture; 
+    
+    renderType == "webgl" && (texture = gl.createTexture())
+
     let beforeNum = chars.length
     let GraphSet = new Set()
     textSet.forEach(item => {
@@ -144,29 +150,39 @@ export const sdfCreate = (graph: any, textSet: Set<any>, thumbnail: boolean = fa
         }
     }
 
-    try {
-        flag = false
-        if (graph.id === graphId && Object.keys(instancesGL).length <= 1) {
-            throttled(graph, gl, texture);
-        }
-        else {
-            initGlTextureBind(gl, gl.TEXTURE1, texture, sdfCanvas, false)
-            if (Object.keys(instancesGL).length > 0) {
-                for (let i in instancesGL) {
-                    let gl = instancesGL[i].gl
-                    if (GraphSet.has(instancesGL[i].id)) {
-                        // initGlTextureBind(gl, gl.TEXTURE1, gl.createTexture(), sdfCanvas, false)
-                        throttledT(instancesGL[i], gl, gl.createTexture())
+    if(renderType === "webgl"){
+        try {
+            flag = false
+            if (graph.id === graphId && Object.keys(instancesGL).length <= 1) {
+                throttled(graph, gl, texture);
+            }
+            else {
+                initGlTextureBind(gl, gl.TEXTURE1, texture, sdfCanvas, false)
+                if (Object.keys(instancesGL).length > 0) {
+                    for (let i in instancesGL) {
+                        let gl = instancesGL[i].gl
+                        if (GraphSet.has(instancesGL[i].id)) {
+                            // initGlTextureBind(gl, gl.TEXTURE1, gl.createTexture(), sdfCanvas, false)
+                            throttledT(instancesGL[i], gl, gl.createTexture())
+                        }
                     }
                 }
+    
             }
-
+            graphId = graph.id
+        } catch (err) {
+            console.warn('文字生成失败')
         }
-        graphId = graph.id
-    } catch (err) {
-        console.warn('文字生成失败')
     }
+    
 }
+
+export const getGPULabelTexture = (
+    device: GPUDevice
+) => {
+    return GetTexture(device, sdfCanvas)
+}
+
 
 export function drawText(size: number, str: string, maxLength: number, style: string = 'normal') {
     if (str === '') return
@@ -234,6 +250,7 @@ export function drawText(size: number, str: string, maxLength: number, style: st
         )
         pen.x = pen.x + advance * screenScale * scale
     }
+
     return (globalProp.labelStore[`${size}-${str}-${style}`] = {
         textureElements,
         vertexElements,

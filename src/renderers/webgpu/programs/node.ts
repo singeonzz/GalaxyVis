@@ -1,6 +1,6 @@
 import nodeVert from '../shaders/node.vert.wgsl'
 import nodeFrag from '../shaders/node.frag.wgsl'
-import { CreateGPUBuffer } from '../../../utils/webGPUtils'
+import { CreateGPUBuffer, CreateGPUBufferUint } from '../../../utils/webGPUtils'
 import { basicData, globalProp } from '../../../initial/globalProp'
 import { coordTransformation, newfloatColor } from '../../../utils'
 import { mat4, glMatrix } from 'gl-matrix'
@@ -21,10 +21,12 @@ export default class NodeGPUProgram {
     private matsBindGroupLayout: GPUBindGroupLayout | undefined
     private pipeline: GPURenderPipeline | undefined
     private isInit = true
-    private ts: { 
-        texture: GPUTexture; 
-        sampler: GPUSampler 
-    } | undefined
+    private ts:
+        | {
+              texture: GPUTexture
+              sampler: GPUSampler
+          }
+        | undefined
 
     constructor(graph: any) {
         this.graph = graph
@@ -35,7 +37,7 @@ export default class NodeGPUProgram {
     async initPineLine() {
         const { device, format } = this.gpu
 
-        const bindGroupLayout = this.bindGroupLayout = device.createBindGroupLayout({
+        const bindGroupLayout = (this.bindGroupLayout = device.createBindGroupLayout({
             entries: [
                 {
                     binding: 0,
@@ -46,9 +48,9 @@ export default class NodeGPUProgram {
                     },
                 },
             ],
-        })
+        }))
 
-        const matsBindGroupLayout = this.matsBindGroupLayout = device.createBindGroupLayout({
+        const matsBindGroupLayout = (this.matsBindGroupLayout = device.createBindGroupLayout({
             entries: [
                 {
                     binding: 0,
@@ -66,13 +68,13 @@ export default class NodeGPUProgram {
                 {
                     binding: 2,
                     visibility: GPUShaderStage.FRAGMENT,
-                    texture: { 
-                        sampleType: "float", 
-                        viewDimension: "2d" 
+                    texture: {
+                        sampleType: 'float',
+                        viewDimension: '2d',
                     },
-                }, 
+                },
             ],
-        })
+        }))
 
         const pipelineLayout = device.createPipelineLayout({
             bindGroupLayouts: [bindGroupLayout, matsBindGroupLayout],
@@ -147,12 +149,11 @@ export default class NodeGPUProgram {
     }
 
     async render(passEncoder: any) {
-
-        this.isInit && await this.initPineLine()
+        this.isInit && (await this.initPineLine())
 
         this.ts = globalProp.gpuTexture
 
-        if(!this.ts) return;
+        if (!this.ts) return
 
         const graph = this.graph
 
@@ -164,16 +165,12 @@ export default class NodeGPUProgram {
 
         const { device, canvas } = this.gpu
 
-        const vertexData = new Float32Array([
-            -1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1,
-
-            -1, 1, 0, 1, 1, -1, 1, 0, 1, 1, 1, 1,
-        ])
+        const vertexData = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1])
 
         const vertexBuffer = CreateGPUBuffer(device, vertexData)
         const nodes = this.graph.getNodes()
         // 绘制个数
-        const numTriangles = nodes.size;
+        const numTriangles = nodes.size
         // uniform属性
         const uniformBytes = ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT
         const alignedUniformBytes = Math.ceil(uniformBytes / 256) * 256
@@ -194,11 +191,7 @@ export default class NodeGPUProgram {
         const wid = 128
 
         nodes.forEach((item: any, i: number) => {
-            let { 
-                x, y, radius, color, 
-                innerStroke, isSelect,image,
-                icon 
-            } = item.getAttribute()
+            let { x, y, radius, color, innerStroke, isSelect, image, icon } = item.getAttribute()
 
             let zoomResults: number = Math.ceil((radius / globalProp.standardRadius) * 1e2) / 1e3
 
@@ -208,8 +201,10 @@ export default class NodeGPUProgram {
 
             let strokeWidth = (Number(innerStroke?.width) >= 0 ? innerStroke.width : 2) / 1e2
 
-            let iconNum: number = image.url ? iconMap.get(image.url + color)?.num : iconMap.get(icon.content)?.num
-    
+            let iconNum: number = image.url
+                ? iconMap.get(image.url + color)?.num
+                : iconMap.get(icon.content)?.num
+
             let iconType = image.url ? 1 : icon.content != '' ? 2 : 3
 
             if (!iconNum) {
@@ -217,8 +212,8 @@ export default class NodeGPUProgram {
             }
 
             let uv_x = ((wid * iconNum) % (wid * atlas)) / (wid * atlas),
-                uv_y = 1 - (wid + wid * Math.floor(iconNum / atlas)) / (wid * atlas);
-            
+                uv_y = 1 - (wid + wid * Math.floor(iconNum / atlas)) / (wid * atlas)
+
             let strokeColor
             if (isSelect) {
                 strokeColor = newfloatColor(innerStroke?.selectedColor || innerStroke || '#fff')
@@ -237,7 +232,6 @@ export default class NodeGPUProgram {
 
             uniformBufferData[alignedUniformFloats * i + 7] = uv_x // uv_x
             uniformBufferData[alignedUniformFloats * i + 8] = uv_y // uv_y
-
 
             bindGroups[i] = device.createBindGroup({
                 layout: this.bindGroupLayout as GPUBindGroupLayout,
@@ -273,15 +267,15 @@ export default class NodeGPUProgram {
                         offset: matOffset,
                         size: 64 * 2,
                     },
-                }, 
+                },
                 {
                     binding: 1,
-                    resource: this.ts.sampler
+                    resource: this.ts.sampler,
                 },
                 {
                     binding: 2,
-                    resource: this.ts.texture.createView()
-                }    
+                    resource: this.ts.texture.createView(),
+                },
             ],
         })
 
@@ -306,11 +300,14 @@ export default class NodeGPUProgram {
 
         passEncoder.setBindGroup(1, uniformMatBindGroup)
 
+        const indexData = new Uint32Array([0, 1, 2, 2, 1, 3])
+        const indexBuffer = CreateGPUBufferUint(device, indexData)
+        passEncoder.setIndexBuffer(indexBuffer, 'uint32')
+
         for (let i = 0; i < numTriangles; ++i) {
             passEncoder.setBindGroup(0, bindGroups[i])
 
-            passEncoder.draw(6)
+            passEncoder.drawIndexed(6, 5, 0, 0, ATTRIBUTES * 16 * i)
         }
-        // passEncoder.drawIndexed(6);
     }
 }

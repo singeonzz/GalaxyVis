@@ -35,6 +35,7 @@ import pulseCanvas from './renderers/canvas/pulse'
 import { CheckWebGPU, GetTexture, InitGPU } from './utils/webGPUtils'
 import NodeGPUProgram from './renderers/webgpu/programs/node'
 import EdgeGPUProgram from './renderers/webgpu/programs/edge'
+import LabelGPUProgram from './renderers/webgpu/programs/label'
 
 export default class galaxyvis extends Graph {
     public gl!: WebGLRenderingContext // webgl上下文
@@ -46,7 +47,7 @@ export default class galaxyvis extends Graph {
     private camera: Camera | null //相机
     private mouseCaptor: CaptorsMouse | null //鼠标事件
     private nodeProgram!: nodeProgram | nodeCanvas | fastnodeProgram | NodeGPUProgram //点渲染器
-    private textProgram!: sdfTextProgram | lableCanvas //文字渲染器
+    private textProgram!: sdfTextProgram | lableCanvas | LabelGPUProgram //文字渲染器
     private edgeProgram!: edgeProgram | edgeCanvas | EdgeGPUProgram //边渲染器
     private haloProgram!: haloProgram | haloCanvas //光环渲染器
     private debounce!: Function // 防抖函数
@@ -556,6 +557,7 @@ export default class galaxyvis extends Graph {
     private initGPURender(): void {
         this.nodeProgram = new NodeGPUProgram(this)
         this.edgeProgram = new EdgeGPUProgram(this)
+        this.textProgram = new LabelGPUProgram(this)
     }
 
     // 清理缓冲区和图片缓存
@@ -882,6 +884,8 @@ export default class galaxyvis extends Graph {
 
             await (that.nodeProgram as NodeGPUProgram).render(passEncoder);
 
+            await (that.textProgram as LabelGPUProgram).render(passEncoder);
+            
             passEncoder.end()
 
             // 向GPU发出命令
