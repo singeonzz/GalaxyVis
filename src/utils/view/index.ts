@@ -21,8 +21,8 @@ export const viewZoomChange = (
             animateCamera(galaxyvis, { zoom: nowZoom, position: nowPosition }, opts as AnimateOptions, () => {
                 resolve((): void => {})
             })
-        } catch {
-            reject('ZoomChange Fail')
+        } catch (err){
+            reject(err + 'ZoomChange Fail')
         }
     })
 }
@@ -80,7 +80,7 @@ export const viewLocateGraph = (galaxyvis: any, options?: any) => {
         let { thumbnail, BoxCanvas } = globalInfo[GraphId]
 
         let renderType = galaxyvis.renderer
-
+        if(renderType === "webgpu") renderType = "webgl"
         let coordRight: number = -Infinity, //右边界
             coordLeft: number = Infinity, //左边界
             coordTop: number = -Infinity, //上边界

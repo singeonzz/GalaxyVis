@@ -192,11 +192,11 @@ export default class galaxyvis extends Graph {
                 flag = false
                 console.warn('zoom init happened maxValue < minValue')
             }
-            if (maxValue < 0 && maxValue > 180) {
+            if (maxValue < 0 || maxValue > 180) {
                 flag = false
                 console.warn('zoom maxValue should in 0 to 180')
             }
-            if (minValue < 0 && minValue > 180) {
+            if (minValue < 0 || minValue > 180) {
                 flag = false
                 console.warn('zoom minValue should in 0 to 180')
             }
@@ -855,13 +855,18 @@ export default class galaxyvis extends Graph {
         } as any
 
         if (this.frameId) {
+            const queue = device.queue;
+            await queue.onSubmittedWorkDone()
+
             cancelFrame(this.frameId);
             this.frameId = null;
             textureView = null;
+            commandEncoder = null;
         }
 
         if (device && device.queue) {
-            textureView = await context.getCurrentTexture().createView()
+
+            textureView = context.getCurrentTexture().createView()
 
             renderPassDescriptor.colorAttachments[0].view = textureView
 
@@ -872,13 +877,14 @@ export default class galaxyvis extends Graph {
         }
 
         async function tickFrame() {
-            const queue = device.queue
+            const queue = device.queue;
 
-            await (that.edgeProgram as EdgeGPUProgram).render(passEncoder)
+            await (that.edgeProgram as EdgeGPUProgram).render(passEncoder);
 
-            await (that.nodeProgram as NodeGPUProgram).render(passEncoder)
+            await (that.nodeProgram as NodeGPUProgram).render(passEncoder);
 
             passEncoder.end()
+
             // 向GPU发出命令
             queue.submit([commandEncoder.finish()])
         }

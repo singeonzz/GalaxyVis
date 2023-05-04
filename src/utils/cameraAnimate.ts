@@ -17,14 +17,17 @@ export let cameraFram: number | null = null
 export function animateCamera(
     graph: any,
     targets: any,
-    opts: {
-        duration?: number
-        easing?: string
-    } | AnimateOptions,
+    opts:
+        | {
+              duration?: number
+              easing?: string
+          }
+        | AnimateOptions,
     callback: () => void,
 ): () => void {
     let { duration, easing } = ANIMATE_DEFAULTS
     let camera = graph.camera
+    !opts && (opts = {})
     opts.duration = opts.duration || duration
     opts.easing = opts.easing || easing
     // 动画缓动方式和延时
@@ -43,7 +46,7 @@ export function animateCamera(
         position: camera.position,
     }
 
-    cameraFram = null;
+    cameraFram = null
 
     const step = () => {
         let p = (Date.now() - start) / options.duration
