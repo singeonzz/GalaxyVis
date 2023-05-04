@@ -23,7 +23,7 @@ export const InitGPU = async (
         // 也可以为alphaMode 设置为 ‘premultiplied’ （相当于alpha预乘），
         // 在这种情况下，作为 WebGPU 绘图的结果，如果画布像素的 alpha 小于 1，
         // 则该像素将是画布和 HTML 元素背景混合的颜色。
-        alphaMode: "opaque",
+        alphaMode: "premultiplied",
     });
     return { device, canvas, format, context };
 };
