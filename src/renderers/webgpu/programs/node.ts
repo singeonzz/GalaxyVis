@@ -307,7 +307,7 @@ export default class NodeGPUProgram {
         for (let i = 0; i < numTriangles; ++i) {
             passEncoder.setBindGroup(0, bindGroups[i])
 
-            passEncoder.drawIndexed(6, 5, 0, 0, ATTRIBUTES * 16 * i)
+            passEncoder.drawIndexed(6, 1)
         }
     }
 }
