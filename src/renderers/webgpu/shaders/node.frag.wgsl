@@ -14,7 +14,8 @@ struct inPut {
     @location(3) vStrokeColor: vec4<f32>,
 
     @location(4) vUV: vec2<f32>,
-    @location(5) uIconType: f32
+    @location(5) uIconType: f32,
+    @location(6) uIconColor: vec4<f32>,
 }
 
 @fragment
@@ -48,7 +49,7 @@ fn frag_main(
     } else if shape == 2u {
             // icon 
         let alpha = smoothstep(0., .9, textureColor.a);
-        InteriorColor = mix(col, vec4(1.0), alpha);
+        InteriorColor = mix(col, in.uIconColor, alpha);
     } else {
         InteriorColor = col;
     }

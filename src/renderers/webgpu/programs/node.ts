@@ -5,7 +5,7 @@ import { basicData, globalProp } from '../../../initial/globalProp'
 import { coordTransformation, newfloatColor } from '../../../utils'
 import { mat4, glMatrix } from 'gl-matrix'
 
-const ATTRIBUTES = 9
+const ATTRIBUTES = 10
 
 export default class NodeGPUProgram {
     private gpu: {
@@ -155,6 +155,8 @@ export default class NodeGPUProgram {
 
         if (!this.ts) return
 
+        const that = this
+
         const graph = this.graph
 
         const graphId = graph.id
@@ -169,8 +171,31 @@ export default class NodeGPUProgram {
 
         const vertexBuffer = CreateGPUBuffer(device, vertexData)
         const nodes = this.graph.getNodes()
+
+        let drawNodeList: any = new Map()
+
+        // badges;
+        nodes.forEach((item: any) => {
+            let id = item.getId()
+            let badges = item.getAttribute('badges')
+            const isBadges = badges ? true : false
+
+            drawNodeList.set(id, {
+                badges: isBadges,
+            })
+
+            if (isBadges) {
+                let badgesArray = Object.keys(badges)
+                for (let i = 0; i < badgesArray.length; i++) {
+                    drawNodeList.set(`badges_${badgesArray[i]}` + id, {
+                        badges: true,
+                    })
+                }
+            }
+        })
+
         // 绘制个数
-        const numTriangles = nodes.size
+        const numTriangles = drawNodeList.size || nodes.size
         // uniform属性
         const uniformBytes = ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT
         const alignedUniformBytes = Math.ceil(uniformBytes / 256) * 256
@@ -190,8 +215,49 @@ export default class NodeGPUProgram {
         const iconMap = globalProp.iconMap
         const wid = 128
 
-        nodes.forEach((item: any, i: number) => {
-            let { x, y, radius, color, innerStroke, isSelect, image, icon } = item.getAttribute()
+        function addUniformData(
+            i: number,
+            zoomResults: number,
+            offsets: number[],
+            colorFloat: number,
+            strokeWidth: number,
+            strokeColor: number,
+            iconType: number,
+            iconColor: number,
+            uv_x: number,
+            uv_y: number,
+        ) {
+            uniformBufferData[alignedUniformFloats * i + 0] = zoomResults // scale
+            uniformBufferData[alignedUniformFloats * i + 1] = offsets[0] // x
+            uniformBufferData[alignedUniformFloats * i + 2] = offsets[1] // y
+            uniformBufferData[alignedUniformFloats * i + 3] = colorFloat // floatColor
+            uniformBufferData[alignedUniformFloats * i + 4] = strokeWidth // StrokeWidth
+            uniformBufferData[alignedUniformFloats * i + 5] = strokeColor // StrokeColor
+
+            uniformBufferData[alignedUniformFloats * i + 6] = iconType // iconType
+            uniformBufferData[alignedUniformFloats * i + 7] = iconColor // iconColor
+
+            uniformBufferData[alignedUniformFloats * i + 8] = uv_x // uv_x
+            uniformBufferData[alignedUniformFloats * i + 9] = uv_y // uv_y
+
+            bindGroups[i] = device.createBindGroup({
+                layout: that.bindGroupLayout as GPUBindGroupLayout,
+                entries: [
+                    {
+                        binding: 0,
+                        resource: {
+                            buffer: uniformBuffer,
+                            offset: i * alignedUniformBytes,
+                            size: ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT,
+                        },
+                    },
+                ],
+            })
+        }
+        let nodeIndex = 0
+        nodes.forEach((item: any) => {
+            let { x, y, radius, color, innerStroke, isSelect, image, icon, badges } =
+                item.getAttribute()
 
             let zoomResults: number = Math.ceil((radius / globalProp.standardRadius) * 1e2) / 1e3
 
@@ -210,7 +276,7 @@ export default class NodeGPUProgram {
             if (!iconNum) {
                 iconNum = 0
             }
-
+            let iconColor = newfloatColor(icon?.color || '#f00')
             let uv_x = ((wid * iconNum) % (wid * atlas)) / (wid * atlas),
                 uv_y = 1 - (wid + wid * Math.floor(iconNum / atlas)) / (wid * atlas)
 
@@ -221,31 +287,70 @@ export default class NodeGPUProgram {
                 strokeColor = newfloatColor(innerStroke?.color || innerStroke || '#fff')
             }
 
-            uniformBufferData[alignedUniformFloats * i + 0] = zoomResults // scale
-            uniformBufferData[alignedUniformFloats * i + 1] = offsets[0] // x
-            uniformBufferData[alignedUniformFloats * i + 2] = offsets[1] // y
-            uniformBufferData[alignedUniformFloats * i + 3] = colorFloat // floatColor
-            uniformBufferData[alignedUniformFloats * i + 4] = strokeWidth // StrokeWidth
-            uniformBufferData[alignedUniformFloats * i + 5] = strokeColor // StrokeColor
+            addUniformData(
+                nodeIndex++,
+                zoomResults,
+                offsets,
+                colorFloat,
+                strokeWidth,
+                strokeColor,
+                iconType,
+                iconColor,
+                uv_x,
+                uv_y,
+            )
 
-            uniformBufferData[alignedUniformFloats * i + 6] = iconType // iconType
+            if (badges) {
+                let badgesArray = Object.keys(badges)
+                for (let i = 0; i < badgesArray.length; i++) {
+                    let {
+                        color: badgesColor,
+                        scale,
+                        text,
+                        stroke,
+                        image,
+                        postion,
+                    } = badges[badgesArray[i]]
+                    badgesColor =
+                        badgesColor == 'inherit'
+                            ? colorFloat
+                            : badgesColor
+                            ? newfloatColor(badgesColor)
+                            : newfloatColor('#fff')
+                    scale = scale || 0.35
+                    let innerWidth = Number(stroke?.width) >= 0 ? stroke.width : 2
+                    let zoomResults2 = zoomResults
+                    let size = zoomResults2 * scale
 
-            uniformBufferData[alignedUniformFloats * i + 7] = uv_x // uv_x
-            uniformBufferData[alignedUniformFloats * i + 8] = uv_y // uv_y
+                    postion = badgesArray[i] || 'bottomRight'
 
-            bindGroups[i] = device.createBindGroup({
-                layout: this.bindGroupLayout as GPUBindGroupLayout,
-                entries: [
-                    {
-                        binding: 0,
-                        resource: {
-                            buffer: uniformBuffer,
-                            offset: i * alignedUniformBytes,
-                            size: ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT,
-                        },
-                    },
-                ],
-            })
+                    let direction = globalProp.direction
+
+                    let x = offsets[0] + direction[postion][0] * zoomResults * 0.6,
+                        y = offsets[1] - direction[postion][1] * zoomResults * 0.6
+                    let iconType = image ? 1 : text?.content != '' ? 2 : 3
+                    let badgesIconColor = newfloatColor(text?.color || '#f00')
+                    let iconNum: number = image
+                        ? iconMap.get(image)?.num
+                        : iconMap.get(text?.content || '')?.num
+
+                    let uv_x = ((wid * iconNum) % (wid * atlas)) / (wid * atlas),
+                        uv_y = 1 - (wid + wid * Math.floor(iconNum / atlas)) / (wid * atlas)
+
+                    addUniformData(
+                        nodeIndex++,
+                        size,
+                        [x,y],
+                        badgesColor,
+                        innerWidth / 1e2,
+                        newfloatColor(stroke?.color || '#fff'),
+                        iconType,
+                        badgesIconColor,
+                        uv_x,
+                        uv_y,
+                    )
+                }
+            }
         })
 
         const projection = mat4.perspective(

@@ -12,6 +12,7 @@ struct Uniforms {
         strokeWidth: f32,
         strokeColor: u32,
         iconType: f32,
+        iconColor: u32,
         uvx:f32,
         uvy:f32,
     }
@@ -32,7 +33,8 @@ struct outPut {
     @location(2) vStrokeWidth: f32,
     @location(3) vStrokeColor: vec4<f32>,
     @location(4) vUV: vec2<f32>,
-    @location(5) uIconType: f32
+    @location(5) uIconType: f32,
+    @location(6) uIconColor: vec4<f32>,
 }
 
 // 顶点着色器入口
@@ -70,6 +72,14 @@ fn vert_main(
     output.vStrokeColor = vec4<f32>(sr, sg, sb, sa);
 
     output.vStrokeWidth = uniforms.strokeWidth;
+
+    // 解压icon颜色
+    var icColor: u32 = uniforms.iconColor;
+    var ia: f32 = f32((icColor & unit32) >> 24u) / 255.0;
+    var ib: f32 = f32((icColor & unit24) >> 16u) / 255.0;
+    var ig: f32 = f32((icColor & unit16) >> 8u) / 255.0;
+    var ir: f32 = f32(icColor & unit8) / 255.0;
+    output.uIconColor = vec4<f32>(ir, ig, ib, ia);
 
     output.uIconType = uniforms.iconType;
     // output.vUV = coord;
