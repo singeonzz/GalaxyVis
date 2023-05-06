@@ -1,6 +1,8 @@
 import galaxyvis from '../src/galaxyVis'
 
 let renderer = 'webgpu'
+// let renderer = 'webgl'
+
 let galaxyVis = new galaxyvis({
     container: 'container',
     renderer: renderer,
@@ -33,7 +35,7 @@ const testEvent = () => {
         '#9DB09E',
         '#F8C821',
     ]
-    const drawNum = 10000
+    const drawNum = 5
     let arr = new Array()
     let num = Math.floor(Math.sqrt(drawNum) + 0.5)
     let line = new Array()
@@ -51,28 +53,42 @@ const testEvent = () => {
                 },
                 icon: {
                     content: k3[i%3],
-                    font: "iconfont"
+                    font: "iconfont",
                 },
-
+                badges: i==1 ? {
+                    topRight: {
+                        color: "#f00",
+                        text: {
+                            font: 'iconfont',
+                            color: "#fff",
+                            content: "\ue63a",
+                            scale: .6
+                        },
+                        stroke: {
+                            color: '#fff',
+                            width: 1
+                        }
+                    }
+                } : null
             },
         }
 
-        // i != drawNum -1 && (line[i] = {
-        //     source: `n${i}`,
-        //     target: `n${i + 1}`,
-        //     attribute: {
-        //         color: colors[Math.floor(Math.random() * colors.length) || 0],
-        //     }
-        // })
+        i != drawNum -1 && (line[i] = {
+            source: `n${i}`,
+            target: `n${i + 1}`,
+            attribute: {
+                color: colors[Math.floor(Math.random() * colors.length) || 0],
+            }
+        })
     }
     
-    line.push({
-        source: 'n0',
-        target: 'n1',
-        attribute: {
-            width: 1.2
-        }
-    })
+    // line.push({
+    //     source: 'n0',
+    //     target: 'n1',
+    //     attribute: {
+    //         width: 1.2
+    //     }
+    // })
 
     galaxyVis.gpu.then(()=>{
         galaxyVis.addGraph({

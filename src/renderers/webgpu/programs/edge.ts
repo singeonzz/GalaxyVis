@@ -20,6 +20,7 @@ export default class EdgeGPUProgram {
     private graph: any
     private matsBindGroupLayout: GPUBindGroupLayout | undefined
     private pipeline: GPURenderPipeline | undefined
+    private isInit = true
     private bindGroupLayout: GPUBindGroupLayout | undefined
     private maxMappingLength: number
 
@@ -29,40 +30,8 @@ export default class EdgeGPUProgram {
         this.maxMappingLength = (14 * 1024 * 1024) / Float32Array.BYTES_PER_ELEMENT
     }
 
-    async render(passEncoder: any) {
-        const graph = this.graph
-        const camera = graph.camera
-        const graphId = graph.id
-        const { device, format, canvas } = this.gpu
-
-        // 获取线集合
-        let { lineDrawCount: edgeArray, num, plotNum } = this.graph.getEdgeWithArrow()
-
-        let edgeBoundBox = basicData[graphId].edgeBoundBox
-        let edgeList = basicData[graphId].edgeList
-
-        let plotsDefPoint = new Float32Array(num * edgeGroups * 4)
-        let plotsTwoPoint = new Float32Array(plotNum * twoGroup * 4)
-
-        let plotsDefNormal = new Float32Array(num * edgeGroups * 4)
-        let plotsTwoNormal = new Float32Array(plotNum * twoGroup * 4)
-
-        let defL = 0,
-            twoL = 0
-
-        const bindGroups = new Array(num + plotNum)
-        // 绘制个数
-        const numTriangles = num + plotNum
-        // uniform属性
-        const uniformBytes = ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT
-        const alignedUniformBytes = Math.ceil(uniformBytes / 256) * 256
-        const alignedUniformFloats = alignedUniformBytes / Float32Array.BYTES_PER_ELEMENT
-        // 创建unifromBuffer
-        const uniformBuffer = device.createBuffer({
-            size: numTriangles * alignedUniformBytes + Float32Array.BYTES_PER_ELEMENT * 16 * 2,
-            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
-        })
-        const uniformBufferData = new Float32Array(numTriangles * alignedUniformFloats)
+    async initPineLine() {
+        const { device, format } = this.gpu
 
         const bindGroupLayout = (this.bindGroupLayout = device.createBindGroupLayout({
             entries: [
@@ -89,75 +58,7 @@ export default class EdgeGPUProgram {
                 },
             ],
         }))
-
-        let groups = new Array(),
-            def = new Array(),
-            two = new Array()
-
-        // to do 提取到@computer中
-        edgeArray.forEach((item: any[]) => {
-            let id = item[3]
-            let edgeGroup = item[4]
-
-            let boundBox = edgeBoundBox.get(id)
-            let { attrNormal, width, attrMiter, points: attrPoint } = boundBox.points
-            let color = edgeList.get(id)?.getAttribute("color") || "#eee"
-            let colorFloat = newfloatColor(color)
-            // 曲线
-            if (edgeGroup == edgeGroups) {
-                for (let i = 0, j = 0; i < attrPoint.length; i += 2, j += 1) {
-                    plotsDefPoint[defL * edgeGroups * 4 + i] = attrPoint[i]
-                    plotsDefPoint[defL * edgeGroups * 4 + i + 1] = attrPoint[i + 1]
-
-                    plotsDefNormal[defL * edgeGroups * 4 + i] = attrNormal[i] * attrMiter[j]
-                    plotsDefNormal[defL * edgeGroups * 4 + i + 1] = attrNormal[i + 1] * attrMiter[j]
-                }
-                defL++
-                def.push({ color: colorFloat, width })
-            }
-            // 直线
-            else {
-                for (let i = 0, j = 0; i < attrPoint.length; i += 2, j += 1) {
-                    plotsTwoPoint[twoL * twoGroup * 4 + i] = attrPoint[i]
-                    plotsTwoPoint[twoL * twoGroup * 4 + i + 1] = attrPoint[i + 1]
-
-                    plotsTwoNormal[twoL * twoGroup * 4 + i] = attrNormal[i] * attrMiter[j]
-                    plotsTwoNormal[twoL * twoGroup * 4 + i + 1] = attrNormal[i + 1] * attrMiter[j]
-                }
-                twoL++
-                two.push({ color: colorFloat,  width })
-            }
-        })
-
-        groups = [...two, ...def]
-
-        groups.forEach((item: any, i: number) => {
-            uniformBufferData[alignedUniformFloats * i + 0] = item.color // color
-            uniformBufferData[alignedUniformFloats * i + 1] = item.width // width
-
-            bindGroups[i] = device.createBindGroup({
-                layout: this.bindGroupLayout as GPUBindGroupLayout,
-                entries: [
-                    {
-                        binding: 0,
-                        resource: {
-                            buffer: uniformBuffer,
-                            offset: i * alignedUniformBytes,
-                            size: ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT,
-                        },
-                    },
-                ],
-            })
-        })
-
-        const vertexEdgeTwoBuffer = CreateGPUBuffer(device, plotsTwoPoint)
-
-        const vertexEdgeTwoNormalBuffer = CreateGPUBuffer(device, plotsTwoNormal)
-
-        const vertexEdgeDefBuffer = CreateGPUBuffer(device, plotsDefPoint)
-
-        const vertexEdgeDefNormalBuffer = CreateGPUBuffer(device, plotsDefNormal)
-
+        
         const pipelineLayout = device.createPipelineLayout({
             bindGroupLayouts: [bindGroupLayout, matsBindGroupLayout],
         })
@@ -227,6 +128,117 @@ export default class EdgeGPUProgram {
             ...pipelineDesc,
             layout: pipelineLayout,
         })
+
+        this.isInit = false
+    }
+
+    async render(passEncoder: any) {
+
+        this.isInit && (await this.initPineLine())
+
+        const graph = this.graph
+        const camera = graph.camera
+        const graphId = graph.id
+        const { device, format, canvas } = this.gpu
+
+        // 获取线集合
+        let { lineDrawCount: edgeArray, num, plotNum } = this.graph.getEdgeWithArrow()
+
+        let edgeBoundBox = basicData[graphId].edgeBoundBox
+        let edgeList = basicData[graphId].edgeList
+
+        let plotsDefPoint = new Float32Array(num * edgeGroups * 4)
+        let plotsTwoPoint = new Float32Array(plotNum * twoGroup * 4)
+
+        let plotsDefNormal = new Float32Array(num * edgeGroups * 4)
+        let plotsTwoNormal = new Float32Array(plotNum * twoGroup * 4)
+
+        let defL = 0,
+            twoL = 0
+
+        const bindGroups = new Array(num + plotNum)
+        // 绘制个数
+        const numTriangles = num + plotNum
+        // uniform属性
+        const uniformBytes = ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT
+        const alignedUniformBytes = Math.ceil(uniformBytes / 256) * 256
+        const alignedUniformFloats = alignedUniformBytes / Float32Array.BYTES_PER_ELEMENT
+        // 创建unifromBuffer
+        const uniformBuffer = device.createBuffer({
+            size: numTriangles * alignedUniformBytes + Float32Array.BYTES_PER_ELEMENT * 16 * 2,
+            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
+        })
+        const uniformBufferData = new Float32Array(numTriangles * alignedUniformFloats)
+
+        
+
+        let groups = new Array(),
+            def = new Array(),
+            two = new Array()
+
+        // to do 提取到@computer中
+        edgeArray.forEach((item: any[]) => {
+            let id = item[3]
+            let edgeGroup = item[4]
+
+            let boundBox = edgeBoundBox.get(id)
+            let { attrNormal, width, attrMiter, points: attrPoint } = boundBox.points
+            let color = edgeList.get(id)?.getAttribute("color") || "#eee"
+            let colorFloat = newfloatColor(color)
+            // 曲线
+            if (edgeGroup == edgeGroups) {
+                for (let i = 0, j = 0; i < attrPoint.length; i += 2, j += 1) {
+                    plotsDefPoint[defL * edgeGroups * 4 + i] = attrPoint[i]
+                    plotsDefPoint[defL * edgeGroups * 4 + i + 1] = attrPoint[i + 1]
+
+                    plotsDefNormal[defL * edgeGroups * 4 + i] = attrNormal[i] * attrMiter[j]
+                    plotsDefNormal[defL * edgeGroups * 4 + i + 1] = attrNormal[i + 1] * attrMiter[j]
+                }
+                defL++
+                def.push({ color: colorFloat, width })
+            }
+            // 直线
+            else {
+                for (let i = 0, j = 0; i < attrPoint.length; i += 2, j += 1) {
+                    plotsTwoPoint[twoL * twoGroup * 4 + i] = attrPoint[i]
+                    plotsTwoPoint[twoL * twoGroup * 4 + i + 1] = attrPoint[i + 1]
+
+                    plotsTwoNormal[twoL * twoGroup * 4 + i] = attrNormal[i] * attrMiter[j]
+                    plotsTwoNormal[twoL * twoGroup * 4 + i + 1] = attrNormal[i + 1] * attrMiter[j]
+                }
+                twoL++
+                two.push({ color: colorFloat,  width })
+            }
+        })
+
+        groups = [...two, ...def]
+
+        groups.forEach((item: any, i: number) => {
+            uniformBufferData[alignedUniformFloats * i + 0] = item.color // color
+            uniformBufferData[alignedUniformFloats * i + 1] = item.width // width
+
+            bindGroups[i] = device.createBindGroup({
+                layout: this.bindGroupLayout as GPUBindGroupLayout,
+                entries: [
+                    {
+                        binding: 0,
+                        resource: {
+                            buffer: uniformBuffer,
+                            offset: i * alignedUniformBytes,
+                            size: ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT,
+                        },
+                    },
+                ],
+            })
+        })
+
+        const vertexEdgeTwoBuffer = CreateGPUBuffer(device, plotsTwoPoint)
+
+        const vertexEdgeTwoNormalBuffer = CreateGPUBuffer(device, plotsTwoNormal)
+
+        const vertexEdgeDefBuffer = CreateGPUBuffer(device, plotsDefPoint)
+
+        const vertexEdgeDefNormalBuffer = CreateGPUBuffer(device, plotsDefNormal)
 
         const projection = mat4.perspective(
             mat4.create(),

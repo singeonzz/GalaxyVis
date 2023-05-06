@@ -1,5 +1,5 @@
 import { mat4 } from 'gl-matrix'
-import { coordTransformation, floatColor, initGlTextureBind } from '..'
+import { coordTransformation, floatColor, initGlTextureBind, newfloatColor } from '..'
 import tinySDF from '.'
 import { basicData, globalInfo, globalProp, instancesGL } from '../../initial/globalProp'
 import throttle from 'lodash/throttle'
@@ -41,15 +41,15 @@ export const clearChars = () => {
 }
 
 export const clearGraphChars = (id: string) => {
-    charsMap.delete(id);
+    charsMap.delete(id)
 }
 
 export const sdfCreate = (graph: any, textSet: Set<any>, thumbnail: boolean = false) => {
     if (thumbnail) return
-    
-    let renderType = graph.renderer;
 
-    let gl = renderType === "webgl" ? graph.gl : graph.gpu
+    let renderType = graph.renderer
+
+    let gl = renderType === 'webgl' ? graph.gl : graph.gpu
     if (flag) {
         glWidth = gl.canvas.width || 800
         glHeight = gl.canvas.height || 800
@@ -57,21 +57,21 @@ export const sdfCreate = (graph: any, textSet: Set<any>, thumbnail: boolean = fa
         mat4.ortho(pMatrix, 0, glWidth, glHeight, 0, 0, -1)
         mat4.multiply(mvpMatrix, pMatrix, mvMatrix)
 
-        atlas = graph.fast ? globalProp.fastAtlas : (globalProp.atlas || 8)
+        atlas = graph.fast ? globalProp.fastAtlas : globalProp.atlas || 8
         sdfCtx.canvas.width = Math.floor(atlas * 64)
         sdfCtx.canvas.height = Math.floor(atlas * 64)
     }
 
-    let texture; 
-    
-    renderType == "webgl" && (texture = gl.createTexture())
+    let texture
+
+    renderType == 'webgl' && (texture = gl.createTexture())
 
     let beforeNum = chars.length
     let GraphSet = new Set()
     textSet.forEach(item => {
-        let arr = item.split("-");
-        if (item.substring(0, 1) == "-") {
-            arr[0] = "-"
+        let arr = item.split('-')
+        if (item.substring(0, 1) == '-') {
+            arr[0] = '-'
             arr[1] = arr[2]
             arr[2] = arr[3]
         }
@@ -88,7 +88,7 @@ export const sdfCreate = (graph: any, textSet: Set<any>, thumbnail: boolean = fa
 
         let charSet = charsMap.get(arr[2])
 
-        if (!charSet.has(arr[0] + '-' +arr[1])) {
+        if (!charSet.has(arr[0] + '-' + arr[1])) {
             charSet.add(arr[0] + '-' + arr[1])
             GraphSet.add(arr[2])
         }
@@ -137,7 +137,7 @@ export const sdfCreate = (graph: any, textSet: Set<any>, thumbnail: boolean = fa
                 x + size <= sdfCanvas.width && i < chars.length;
                 x += size, flags = false
             ) {
-                const { data, width, height, glyphWidth } = sdf.draw(chars[i])
+                const { data, width, height, glyphWidth } = sdf.draw(chars[i])     
                 sdfCtx.putImageData(makeRGBAImageData(data, width, height), x, y)
                 sdfs[`${chars[i].char}-${chars[i].style}`] = {
                     x,
@@ -150,13 +150,12 @@ export const sdfCreate = (graph: any, textSet: Set<any>, thumbnail: boolean = fa
         }
     }
 
-    if(renderType === "webgl"){
+    flag = false
+    if (renderType === 'webgl') {
         try {
-            flag = false
             if (graph.id === graphId && Object.keys(instancesGL).length <= 1) {
-                throttled(graph, gl, texture);
-            }
-            else {
+                throttled(graph, gl, texture)
+            } else {
                 initGlTextureBind(gl, gl.TEXTURE1, texture, sdfCanvas, false)
                 if (Object.keys(instancesGL).length > 0) {
                     for (let i in instancesGL) {
@@ -167,22 +166,18 @@ export const sdfCreate = (graph: any, textSet: Set<any>, thumbnail: boolean = fa
                         }
                     }
                 }
-    
             }
             graphId = graph.id
         } catch (err) {
             console.warn('文字生成失败')
         }
     }
-    
 }
 
-export const getGPULabelTexture = (
-    device: GPUDevice
-) => {
-    return GetTexture(device, sdfCanvas)
+export const getGPULabelTexture = (device: GPUDevice) => {
+    // return null
+    return GetTexture(device, sdfCanvas, false)
 }
-
 
 export function drawText(size: number, str: string, maxLength: number, style: string = 'normal') {
     if (str === '') return
@@ -260,17 +255,26 @@ export function drawText(size: number, str: string, maxLength: number, style: st
         maxLength,
         str,
         style,
-        Occupy: height * scale / 2,
-        nlines: num
+        Occupy: (height * scale) / 2,
+        nlines: num,
     })
 }
 
-const ATTRIBUTES = 18;
+const ATTRIBUTES = 18
 export const sdfDrawTextNew = (graphId: string, attribute: any, angle: number, type: number) => {
     let { text, x, y, radius, isNode, opacity } = attribute
 
-    let { margin = [0, 0], position, color, background, content, fontSize, minVisibleSize, style } = text
-    !style && (style = "normal")
+    let {
+        margin = [0, 0],
+        position,
+        color,
+        background,
+        content,
+        fontSize,
+        minVisibleSize,
+        style,
+    } = text
+    !style && (style = 'normal')
     let result = globalProp.labelStore[`${fontSize}-${content}-${style}`]
 
     let height = result.height / globalInfo[graphId].canvasBox.height
@@ -284,16 +288,17 @@ export const sdfDrawTextNew = (graphId: string, attribute: any, angle: number, t
 
     if (isNode) {
         let xyOffect = coordTransformation(graphId, x, y)
-            ; (x = xyOffect[0]), (y = xyOffect[1])
+        ;(x = xyOffect[0]), (y = xyOffect[1])
     }
-    const transform = (basicData[graphId]?.transform || 223)
+    const transform = basicData[graphId]?.transform || 223
 
     let postionState: { [key: string]: Function } = {
         bottom: () => {
             return [
                 margin[0] + x,
                 margin[1] + y - (radius * 2 + result.Occupy - 3) / transform,
-                angle]
+                angle,
+            ]
         },
         right: () => {
             return [
@@ -310,8 +315,7 @@ export const sdfDrawTextNew = (graphId: string, attribute: any, angle: number, t
             ]
         },
         top: () => {
-            let topGap = result.nlines > 0 ?
-                (result.nlines) * (result.Occupy) : 0
+            let topGap = result.nlines > 0 ? result.nlines * result.Occupy : 0
             return [
                 margin[0] + x,
                 margin[1] + y + (radius * 2 + result.Occupy + 3 + 2 * topGap) / transform,
@@ -344,10 +348,9 @@ export const sdfDrawTextNew = (graphId: string, attribute: any, angle: number, t
 
     let vEle = result.vertexElements
     let tEle = result.textureElements
-    let labelFloat32Array = new Float32Array(ATTRIBUTES * vEle.length / 4)
+    let labelFloat32Array = new Float32Array((ATTRIBUTES * vEle.length) / 4)
     // 纹理矩阵和坐标矩阵的计算
     for (let i = 0, j = 0, k = 0; i < vEle.length; i += 4, j += 2, k += ATTRIBUTES) {
-
         labelFloat32Array[k] = Number(fontSize) || 15
         labelFloat32Array[k + 1] = Number(minVisibleSize) || 6
 
@@ -387,6 +390,145 @@ export const sdfDrawTextNew = (graphId: string, attribute: any, angle: number, t
         labelFloat32Array[k + 15] = backgroundFloat
         labelFloat32Array[k + 16] = aphaBackground
         labelFloat32Array[k + 17] = opacity
+    }
+
+    result = null
+
+    return labelFloat32Array
+}
+
+const GPUATTRIBUTES = 15
+export const sdfDrawGPULable = (
+    graphId: string, 
+    attribute: any, 
+    angle: number, 
+    type: number,
+    alignedUniformFloats: number
+) => {
+
+    let { text, x, y, radius, isNode, opacity } = attribute
+
+    let {
+        margin = [0, 0],
+        position,
+        color,
+        background,
+        content,
+        fontSize,
+        style,
+    } = text
+    !style && (style = 'normal')
+    let result = globalProp.labelStore[`${fontSize}-${content}-${style}`]
+
+    let height = result.height / globalInfo[graphId].canvasBox.height
+
+    let colorFloat = newfloatColor(color)
+    let backgroundFloat = newfloatColor(background)
+
+    // 如果是点文字类型的 更具positioin给不同的偏移量
+    let offset: number[] = [0, 0, 0]
+
+    if (isNode) {
+        let xyOffect = coordTransformation(graphId, x, y)
+        x = xyOffect[0]
+        y = xyOffect[1]
+    }
+    const transform = basicData[graphId]?.transform || 223
+
+    let postionState: { [key: string]: Function } = {
+        bottom: () => {
+            return [
+                margin[0] + x,
+                margin[1] + y - (radius * 2 + result.Occupy - 3) / transform,
+                angle,
+            ]
+        },
+        right: () => {
+            return [
+                margin[0] + x + (radius * 2 + 6) / transform + (result.sum * mvpMatrix[0]) / 2,
+                margin[1] + y + height,
+                angle,
+            ]
+        },
+        left: () => {
+            return [
+                margin[0] + x - (radius * 2 + 6) / transform - (result.sum * mvpMatrix[0]) / 2,
+                margin[1] + y + height,
+                angle,
+            ]
+        },
+        top: () => {
+            let topGap = result.nlines > 0 ? result.nlines * result.Occupy : 0
+            return [
+                margin[0] + x,
+                margin[1] + y + (radius * 2 + result.Occupy + 3 + 2 * topGap) / transform,
+                angle,
+            ]
+        },
+        center: () => {
+            return [margin[0] + x, margin[1] + margin[1] + y + height, angle]
+        },
+        default: () => {
+            return [
+                x + margin[0] * Math.cos(angle) + margin[1] * Math.cos(angle - Math.PI / 2),
+                y + margin[0] * Math.sin(angle) + margin[1] * Math.sin(angle - Math.PI / 2),
+                angle,
+            ]
+        },
+    }
+
+    if (type == 1) {
+        offset = postionState[position]()
+    } else {
+        offset = postionState['default']()
+    }
+
+    // 缩放的矩阵计算
+    let XmvpMatrix = mat4.create()
+    mat4.translate(XmvpMatrix, XmvpMatrix, [offset[0], offset[1], 0])
+    mat4.rotateZ(XmvpMatrix, XmvpMatrix, offset[2])
+    mat4.multiply(XmvpMatrix, XmvpMatrix, mvpMatrix)
+
+    let vEle = result.vertexElements
+    let tEle = result.textureElements
+    let labelFloat32Array = new Float32Array((alignedUniformFloats * vEle.length) / 4)
+
+    for (let i = 0, j = 0, k = 0; i < vEle.length; i += 4, j += 2, k++) {
+        // 顶点矩阵
+        let Matrix = mat4.create()
+        // 平移
+        mat4.translate(Matrix, Matrix, [vEle[i], vEle[i + 1], 0])
+        // 缩放
+        mat4.scale(Matrix, Matrix, [vEle[i + 2], vEle[i + 3], 0])
+
+        mat4.multiply(Matrix, XmvpMatrix, Matrix)
+
+        labelFloat32Array[k * alignedUniformFloats + 0] = Matrix[0]
+        labelFloat32Array[k * alignedUniformFloats + 1] = Matrix[4]
+        labelFloat32Array[k * alignedUniformFloats + 2] = Matrix[12]
+
+        labelFloat32Array[k * alignedUniformFloats + 3] = Matrix[1]
+        labelFloat32Array[k * alignedUniformFloats + 4] = Matrix[5]
+        labelFloat32Array[k * alignedUniformFloats + 5] = Matrix[13]
+
+        // 纹理矩阵
+        let TexMatrix = mat4.create()
+        // 平移
+        mat4.translate(TexMatrix, TexMatrix, [tEle[i], tEle[i + 1], 0])
+        // 缩放
+        mat4.scale(TexMatrix, TexMatrix, [tEle[i + 2], tEle[i + 3], 0])
+
+        labelFloat32Array[k * alignedUniformFloats + 6] = TexMatrix[0]
+        labelFloat32Array[k * alignedUniformFloats + 7] = TexMatrix[4]
+        labelFloat32Array[k * alignedUniformFloats + 8] = TexMatrix[12]
+
+        labelFloat32Array[k * alignedUniformFloats + 9] = TexMatrix[1]
+        labelFloat32Array[k * alignedUniformFloats + 10] = TexMatrix[5]
+        labelFloat32Array[k * alignedUniformFloats + 11] = TexMatrix[13]
+
+        labelFloat32Array[k * alignedUniformFloats + 12] = colorFloat
+        labelFloat32Array[k * alignedUniformFloats + 13] = backgroundFloat
+        labelFloat32Array[k * alignedUniformFloats + 14] = opacity
     }
 
     result = null

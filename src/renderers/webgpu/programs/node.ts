@@ -172,7 +172,7 @@ export default class NodeGPUProgram {
         const vertexBuffer = CreateGPUBuffer(device, vertexData)
         const nodes = this.graph.getNodes()
 
-        let drawNodeList: any = new Map()
+        const drawNodeList: any = new Map()
 
         // badges;
         nodes.forEach((item: any) => {
@@ -352,6 +352,8 @@ export default class NodeGPUProgram {
                 }
             }
         })
+
+        // console.log(uniformBufferData,"uniformBufferData")
 
         const projection = mat4.perspective(
             mat4.create(),

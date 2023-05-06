@@ -101,8 +101,9 @@ export const CreateGPUBufferUint = (
 export const GetTexture = async(
     device: GPUDevice, 
     htc: HTMLCanvasElement,
+    flipY = true,
     addressModeU = 'repeat',
-    addressModeV = 'repeat'
+    addressModeV = 'repeat',
 ) => {
     const imageBitmap = await createImageBitmap(htc);
 
@@ -125,7 +126,7 @@ export const GetTexture = async(
     // 将从源图像、视频或画布中获取的快照复制到给定的GPUTexture.
     // 
     device.queue.copyExternalImageToTexture(
-        { source: imageBitmap, flipY: true },
+        { source: imageBitmap, flipY },
         { texture: texture },
         [imageBitmap.width, imageBitmap.height]
     );

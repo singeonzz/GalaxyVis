@@ -370,7 +370,9 @@ export interface globalPropType {
     direction: { [ke: string]: number[] } //badge位置
     textureCtx: CanvasRenderingContext2D | null //纹理canvas
     edgeGroups: number,
-    gpuTexture: any
+    gpuTexture: any,
+
+    // gpuLabelTexture: any
 }
 
 export interface globalInfoData {
