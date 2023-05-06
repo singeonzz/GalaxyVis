@@ -397,7 +397,6 @@ export const sdfDrawTextNew = (graphId: string, attribute: any, angle: number, t
     return labelFloat32Array
 }
 
-const GPUATTRIBUTES = 15
 export const sdfDrawGPULable = (
     graphId: string, 
     attribute: any, 

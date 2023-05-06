@@ -120,7 +120,7 @@ export const edgeInitAttribute = (that: any, attribute: any, useSet: boolean = f
             }
         }
         let thumbnail = that instanceof String || that == null ? that : that.thumbnail
-        if (that.renderer === 'webgl' && !thumbnail) {
+        if ((that.renderer === 'webgl' || that.renderer === "webgpu") && !thumbnail) {
             let flag = updateSDFTextData(attribute?.text, that.id)
             if (flag) initText(that)
             drawText(

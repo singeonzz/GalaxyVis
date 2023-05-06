@@ -1,6 +1,6 @@
 import labelVert from '../shaders/label.vert.wgsl'
 import labelFrag from '../shaders/label.frag.wgsl'
-import { globalProp } from '../../../initial/globalProp'
+import { basicData, globalProp } from '../../../initial/globalProp'
 import { isInSceen } from '../../../utils'
 import { CreateGPUBuffer, CreateGPUBufferUint } from '../../../utils/webGPUtils'
 import { getGPULabelTexture, sdfDrawGPULable } from '../../../utils/tinySdf/sdfDrawText'
@@ -8,6 +8,8 @@ import { mat4, glMatrix } from 'gl-matrix'
 
 const ATTRIBUTES = 15
 const SDFATTRIBUTES = 2
+
+const vertexData = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1])
 
 export default class LabelGPUProgram {
     private gpu: {
@@ -72,7 +74,6 @@ export default class LabelGPUProgram {
             ],
         }))
 
-        
         const pipelineLayout = device.createPipelineLayout({
             bindGroupLayouts: [bindGroupLayout, matsBindGroupLayout],
         })
@@ -143,7 +144,7 @@ export default class LabelGPUProgram {
         this.isInit = false
     }
 
-    async render(passEncoder: any) {
+    async render(passEncoder: any, renderType: string = 'node') {
         this.isInit && (await this.initPineLine())
 
         const graph = this.graph
@@ -159,33 +160,41 @@ export default class LabelGPUProgram {
 
         if (!ts) return
 
-        const vertexData = new Float32Array([
-            -1, -1, 0, 0, 
-            1, -1, 1, 0, 
-            -1, 1, 0, 1, 
-            1, 1, 1, 1
-        ])
-
         const vertexBuffer = CreateGPUBuffer(device, vertexData)
-        const nodes = this.graph.getNodes()
-
-        const LabelsMap = new Map()
         let labelLength = 0
-        nodes.forEach((item: any) => {
-            let attribute = item.getAttribute()
-            let id = item.getId()
-            let text = attribute.text
-            let content = text.content
-            if (
-                !(content == '' || content == null || content == undefined) &&
-                text.minVisibleSize < Math.ceil(text.fontSize * scale * 1e2) / 1e2 &&
-                (this.graph.geo.enabled() ||
-                    isInSceen(graphId, 'webgl', camera.ratio, camera.position, attribute, 1))
-            ) {
-                LabelsMap.set(id, item)
-                labelLength += content.length
+        const LabelsMap = new Map()
+
+        if (renderType === 'node') {
+            const nodes = graph.getNodes()
+            nodes.forEach((item: any) => {
+                let attribute = item.getAttribute()
+                let id = item.getId()
+                let text = attribute.text
+                let content = text.content
+                if (
+                    !(content == '' || content == null || content == undefined) &&
+                    text.minVisibleSize < Math.ceil(text.fontSize * scale * 1e2) / 1e2 &&
+                    (this.graph.geo.enabled() ||
+                        isInSceen(graphId, 'webgl', camera.ratio, camera.position, attribute, 1))
+                ) {
+                    LabelsMap.set(id, item)
+                    labelLength += content.length
+                }
+            })
+        } else {
+            const drawEdgeList = basicData[graphId]?.informationNewEdge || new Map()
+            for (let [key, val] of drawEdgeList) {
+                let text = val.text
+                if (
+                    val.hasContent &&
+                    val.opacity > 0.0 &&
+                    text.minVisibleSize < Math.ceil(text.fontSize * scale * 1e2) / 1e2
+                ) {
+                    LabelsMap.set(key, val)
+                    labelLength += val.text.content.length
+                }
             }
-        })
+        }
 
         // 绘制个数
         const numTriangles = labelLength
@@ -197,8 +206,8 @@ export default class LabelGPUProgram {
         const alignedUniformFloats = alignedUniformBytes / Float32Array.BYTES_PER_ELEMENT
         // 创建unifromBuffer
         const uniformBuffer = device.createBuffer({
-            size: 
-                numTriangles * alignedUniformBytes + 
+            size:
+                numTriangles * alignedUniformBytes +
                 Float32Array.BYTES_PER_ELEMENT * 16 * 2 +
                 Float32Array.BYTES_PER_ELEMENT * 2 * SDFATTRIBUTES,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
@@ -209,12 +218,18 @@ export default class LabelGPUProgram {
 
         const bindGroups = new Array(numTriangles)
 
-        let nodeLabelIndex = 0,
+        let LabelIndex = 0,
             floatArrayLength = 0
 
         LabelsMap.forEach((item: any, key: string) => {
-            const attribute = item.getAttribute()
-            let p = sdfDrawGPULable(graphId, attribute, 0, 1, alignedUniformFloats)
+
+            const attribute = renderType === 'node' ? item.getAttribute() : item
+
+            let p = 
+            renderType === 'node' ?
+                sdfDrawGPULable(graphId, attribute, 0, 1, alignedUniformFloats):
+                sdfDrawGPULable(graphId, attribute, attribute.ANGLE, 2, alignedUniformFloats)
+
             uniformBufferData.set(p, floatArrayLength)
             floatArrayLength += p.length
 
@@ -222,21 +237,21 @@ export default class LabelGPUProgram {
             let content = text.content
             
             for (let i = 0; i < content.length; i++) {
-                bindGroups[nodeLabelIndex + i] = device.createBindGroup({
+                bindGroups[LabelIndex + i] = device.createBindGroup({
                     layout: this.bindGroupLayout as GPUBindGroupLayout,
                     entries: [
                         {
                             binding: 0,
                             resource: {
                                 buffer: uniformBuffer,
-                                offset: (nodeLabelIndex + i) * alignedUniformBytes,
+                                offset: (LabelIndex + i) * alignedUniformBytes,
                                 size: ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT,
                             },
                         },
                     ],
                 })
             }
-            nodeLabelIndex += content.length
+            LabelIndex += content.length
         })
 
         const projection = mat4.perspective(
@@ -252,7 +267,7 @@ export default class LabelGPUProgram {
 
         let gammer = camera.zoom / 75
 
-        const SDFUnity = new Float32Array([atlas * 64, gammer]);
+        const SDFUnity = new Float32Array([atlas * 64, gammer])
 
         const matOffset = numTriangles * alignedUniformBytes
         const uniformMatBindGroup = device.createBindGroup({

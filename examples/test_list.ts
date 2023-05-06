@@ -78,6 +78,7 @@ const testEvent = () => {
             target: `n${i + 1}`,
             attribute: {
                 color: colors[Math.floor(Math.random() * colors.length) || 0],
+                text: `e${i}`
             }
         })
     }

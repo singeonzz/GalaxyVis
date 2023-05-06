@@ -882,9 +882,11 @@ export default class galaxyvis extends Graph {
 
             await (that.edgeProgram as EdgeGPUProgram).render(passEncoder);
 
+            await (that.textProgram as LabelGPUProgram).render(passEncoder, "edge");
+
             await (that.nodeProgram as NodeGPUProgram).render(passEncoder);
 
-            await (that.textProgram as LabelGPUProgram).render(passEncoder);
+            await (that.textProgram as LabelGPUProgram).render(passEncoder, "node");
             
             passEncoder.end()
 
