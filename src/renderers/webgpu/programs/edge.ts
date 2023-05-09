@@ -15,7 +15,7 @@ const ARROWATTRIBUTES = 6
 
 const arrowVertexData = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1])
 
-export default class EdgeHaloGPUProgram {
+export default class EdgeGPUProgram {
     private gpu: {
         device: GPUDevice
         canvas: HTMLCanvasElement

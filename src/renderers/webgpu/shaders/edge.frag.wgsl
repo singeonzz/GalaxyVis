@@ -12,5 +12,9 @@ fn main(
 
     var weight = 1.0 - smoothstep(in.coords.z * 0.5, in.coords.z , distance);
 
-    return vec4(in.vColor.rgb, weight);
+    var color = mix( vec4(0.0), in.vColor, weight);
+
+    return color;
+
+    // return vec4(in.vColor.rgb, weight);
 }
