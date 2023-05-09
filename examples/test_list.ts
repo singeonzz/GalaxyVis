@@ -11,16 +11,9 @@ let galaxyVis = new galaxyvis({
     },
 })
 
-let k3 = [
-    "",
-    "1",
-    "\ue63a",
-    "\ue63a",
-]
+let k3 = ['', '1', '\ue63a', '\ue63a']
 
-let imgs = [
-    "/public/img/sky.jpg"
-]
+let imgs = ['/public/img/sky.jpg']
 
 const testEvent = () => {
     let colors = [
@@ -35,7 +28,7 @@ const testEvent = () => {
         '#9DB09E',
         '#F8C821',
     ]
-    const drawNum = 5
+    const drawNum = 4
     let arr = new Array()
     let num = Math.floor(Math.sqrt(drawNum) + 0.5)
     let line = new Array()
@@ -52,59 +45,69 @@ const testEvent = () => {
                     color: colors[Math.floor(Math.random() * colors.length) || 0],
                 },
                 icon: {
-                    content: k3[i%3],
-                    font: "iconfont",
+                    content: k3[i % 3],
+                    font: 'iconfont',
                 },
-                badges: i==1 ? {
-                    topRight: {
-                        color: "#f00",
-                        text: {
-                            font: 'iconfont',
-                            color: "#fff",
-                            content: "\ue63a",
-                            scale: .6
-                        },
-                        stroke: {
-                            color: '#fff',
-                            width: 1
-                        }
-                    }
-                } : null
+                badges:
+                    i == 1
+                        ? {
+                              topRight: {
+                                  color: '#f00',
+                                  text: {
+                                      font: 'iconfont',
+                                      color: '#fff',
+                                      content: '\ue63a',
+                                      scale: 0.6,
+                                  },
+                                  stroke: {
+                                      color: '#fff',
+                                      width: 1,
+                                  },
+                              },
+                          }
+                        : null,
             },
         }
 
-        i != drawNum -1 && (line[i] = {
-            source: `n${i}`,
-            target: `n${i + 1}`,
-            attribute: {
-                color: colors[Math.floor(Math.random() * colors.length) || 0],
-                text: `e${i}`
-            }
-        })
+        i != drawNum - 1 &&
+            (line[i] = {
+                source: `n${i}`,
+                target: `n${i + 1}`,
+                attribute: {
+                    color: colors[Math.floor(Math.random() * colors.length) || 0],
+                    text: `e${i}`,
+                    shape: {
+                        head: i % 2 == 0 ? 'arrow' : null,
+                    },
+                },
+            })
     }
-    
+
     // line.push({
     //     source: 'n0',
     //     target: 'n1',
     //     attribute: {
-    //         width: 1.2
-    //     }
+    //         shape: {
+    //             head: 'arrow',
+    //         },
+    //         width: 1.2,
+    //     },
     // })
 
-    galaxyVis.gpu.then(()=>{
-        galaxyVis.addGraph({
-            nodes: arr,
-            edges: line
-        }).then(()=>{
-            // galaxyVis.layouts.force({duration: 1500})
-        })
+    galaxyVis.gpu.then(() => {
+        galaxyVis
+            .addGraph({
+                nodes: arr,
+                edges: line,
+            })
+            .then(() => {
+                // galaxyVis.layouts.force({duration: 1500})
+            })
     })
-
-    
 }
 
 // @ts-ignore
-window.galaxyVis = galaxyVis;
+window.galaxyVis = galaxyVis
 
 testEvent()
 

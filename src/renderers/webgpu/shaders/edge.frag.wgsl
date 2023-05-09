@@ -10,7 +10,7 @@ fn main(
 
     var distance = length((in.coords.xy));
 
-    var weight = 1.0 - smoothstep(in.coords.z * 0.8, in.coords.z, distance);
+    var weight = 1.0 - smoothstep(in.coords.z * 0.5, in.coords.z , distance);
 
     return vec4(in.vColor.rgb, weight);
 }

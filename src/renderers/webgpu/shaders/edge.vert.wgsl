@@ -7,6 +7,7 @@ const unit8:u32 = 0x000000FFu;
 struct Uniforms {
     color: u32,
     width: f32,
+    // isArrow: f32,
 }
 @binding(0) @group(0) var<uniform> uniforms: Uniforms;
 
@@ -25,20 +26,21 @@ struct Output {
 
 @vertex
 fn main(
+    // @builtin(instance_index) instanceIdx : u32, 
     @location(0) pos: vec4<f32>,
     @location(1) normal: vec2<f32>
 ) -> Output {
 
     var vPos = vec4(
-        pos.x + normal.x * uniforms.width,
-        pos.y + normal.y * uniforms.width,
+        pos.x + normal.x,
+        pos.y + normal.y,
         0.,
         1. 
     );
 
     var output: Output;
 
-    output.coords = vec3(normal * uniforms.width, uniforms.width);
+    output.coords = vec3(normal, uniforms.width);
 
     output.Position = mats.projection * mats.aXformMatrix * vPos;
         
