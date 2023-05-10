@@ -80,9 +80,9 @@ const testEvent = () => {
                 attribute: {
                     color: colors[Math.floor(Math.random() * colors.length) || 0],
                     // text: `e${i}`,
-                    // shape: {
-                    //     head: i % 2 == 0 ? 'arrow' : null,
-                    // },
+                    shape: {
+                        head: i % 2 == 0 ? 'arrow' : null,
+                    },
                     // halo: {
                     //     width: 5,
                     //     color: "#00f"

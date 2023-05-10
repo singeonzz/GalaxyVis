@@ -839,13 +839,7 @@ export default class galaxyvis extends Graph {
         this.frameId = await requestFrame(tickFrame)
     }
 
-    private tr = throttle(() => {}, 16)
-
-    public async webgpuRender(opts: any = {}) {
-        if (!basicData[this.id]) {
-            return void 0
-        }
-
+    private tr = throttle(async (opts) => {
         const { device, context } = this.gpu
 
         const that = this
@@ -908,5 +902,13 @@ export default class galaxyvis extends Graph {
             // 向GPU发出命令
             queue.submit([commandEncoder.finish()])
         }
+    }, 16)
+
+    public async webgpuRender(opts: any = {}) {
+        if (!basicData[this.id]) {
+            return void 0
+        }
+        this.tr(opts)
+        
     }
 }

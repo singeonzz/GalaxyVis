@@ -267,6 +267,7 @@ export default class NodeGPUProgram {
             const iconMap = globalProp.iconMap
             const wid = 128
 
+            let boundBox: any = new Map()
             let nodeIndex = 0
             nodes.forEach((item: any) => {
                 let id = item.getId()
@@ -315,16 +316,16 @@ export default class NodeGPUProgram {
                 //     })
                 // }
 
-                // boundBox.set(id, {
-                //     xmax: 0.1 * zoomResults + offsets[0],
-                //     xmin: -0.1 * zoomResults + offsets[0],
-                //     ymax: 0.1 * zoomResults + offsets[1],
-                //     ymin: -0.1 * zoomResults + offsets[1],
-                //     // 确定包围盒后 用来判断是否在图形里面
-                //     radius: zoomResults * 0.1,
-                //     num: value.num,
-                //     shape,
-                // })
+                boundBox.set(id, {
+                    xmax: zoomResults + offsets[0],
+                    xmin: -1 * zoomResults + offsets[0],
+                    ymax: zoomResults + offsets[1],
+                    ymin: -1 * zoomResults + offsets[1],
+                    // 确定包围盒后 用来判断是否在图形里面
+                    radius: zoomResults,
+                    // num: value.num,
+                    shape,
+                })
 
                 addUniformData(
                     nodeIndex++,
@@ -391,6 +392,8 @@ export default class NodeGPUProgram {
                     }
                 }
             })
+
+            basicData[graphId].boundBox = boundBox
         }
 
         if(!this.uniformBufferData.length) return;
