@@ -155,8 +155,8 @@ export default class NodeGPUProgram {
     }
 
     async render(passEncoder: any, opts: any) {
-        let { cameraChanged } = opts
-
+        let { cameraChanged, Partial } = opts
+        // console.log(Partial)
         this.isInit && (await this.initPineLine())
 
         this.ts = globalProp.gpuTexture
@@ -304,17 +304,17 @@ export default class NodeGPUProgram {
                     strokeColor = newfloatColor(innerStroke?.color || innerStroke || '#fff')
                 }
 
-                // if (graph.textStatus) {
-                //     camera.quad.insert({
-                //         x: offsets[0],
-                //         y: offsets[1],
-                //         height: zoomResults * 2,
-                //         width: zoomResults * 2,
-                //         id,
-                //         isNode: true,
-                //         shape,
-                //     })
-                // }
+                if (graph.textStatus) {
+                    camera.quad.insert({
+                        x: offsets[0],
+                        y: offsets[1],
+                        height: zoomResults * 2,
+                        width: zoomResults * 2,
+                        id,
+                        isNode: true,
+                        shape,
+                    })
+                }
 
                 boundBox.set(id, {
                     xmax: zoomResults + offsets[0],
@@ -394,6 +394,12 @@ export default class NodeGPUProgram {
             })
 
             basicData[graphId].boundBox = boundBox
+        }
+
+        if (Partial){
+
+
+
         }
 
         if(!this.uniformBufferData.length) return;

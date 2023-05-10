@@ -345,6 +345,18 @@ export default class EdgeGPUProgram {
 
                 let colorFloat = newfloatColor(color)
 
+                let edgeBound = basicData[graphId].edgeBoundBox.get(id)
+                if (this.graph.textStatus) {
+                    camera.quad.insert({
+                        x: (edgeBound.xmax + edgeBound.xmin) / 2,
+                        y: (edgeBound.ymax + edgeBound.ymin) / 2,
+                        width: edgeBound.xmax - edgeBound.xmin,
+                        height: edgeBound.ymax - edgeBound.ymin,
+                        id,
+                        isNode: false,
+                    })
+                }
+
                 if (r2[r2L - 1] == 1) {
                     hasArrow = true
                     let obj = {
@@ -391,6 +403,7 @@ export default class EdgeGPUProgram {
                     twoL++
                     two.push({ color: colorFloat, width, hasArrow })
                 }
+                
             })
 
             this.groups = [...two, ...def]

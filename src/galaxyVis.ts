@@ -662,7 +662,10 @@ export default class galaxyvis extends Graph {
         if (!basicData[GraphId]) {
             return void 0
         }
-        if (this.renderer !== 'webgl') return this.renderCanvas(boolean)
+        if (this.renderer == 'canvas') return this.renderCanvas(boolean)
+
+        if (this.renderer == 'webgpu') return this.webgpuRender({Partial: true})
+
         if (this.thumbnail || globalInfo[GraphId].thumbnail) return this.render()
         if (!this.localUpdate || !this.textStatus) return this.render()
 
@@ -869,9 +872,9 @@ export default class galaxyvis extends Graph {
             commandEncoder = null
         }
 
-        // if (showText && !cameraChanged) {
-        //     this.camera?.quad.clear()
-        // }
+        if (showText && !cameraChanged) {
+            this.camera?.quad.clear()
+        }
 
         if (device && device.queue) {
             textureView = context.getCurrentTexture().createView()
@@ -909,6 +912,6 @@ export default class galaxyvis extends Graph {
             return void 0
         }
         this.tr(opts)
-        
+
     }
 }

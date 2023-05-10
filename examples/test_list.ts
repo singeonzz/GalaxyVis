@@ -39,7 +39,7 @@ const testEvent = () => {
                 x: (i % num) * 400,
                 y: Math.floor(i / num) * 100,
                 color: colors[Math.floor(Math.random() * colors.length) || 0],
-                // text: `n${i}`,
+                text: `n${i}`,
                 innerStroke: {
                     width: 2.0,
                     color: colors[Math.floor(Math.random() * colors.length) || 0],
@@ -79,7 +79,7 @@ const testEvent = () => {
                 target: `n${i + 1}`,
                 attribute: {
                     color: colors[Math.floor(Math.random() * colors.length) || 0],
-                    // text: `e${i}`,
+                    text: `e${i}`,
                     shape: {
                         head: i % 2 == 0 ? 'arrow' : null,
                     },
