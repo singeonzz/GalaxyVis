@@ -144,7 +144,10 @@ export default class LabelGPUProgram {
         this.isInit = false
     }
 
-    async render(passEncoder: any, renderType: string = 'node') {
+    async render(passEncoder: any, opts: any) {
+
+        let { renderType } = opts
+
         this.isInit && (await this.initPineLine())
 
         const graph = this.graph

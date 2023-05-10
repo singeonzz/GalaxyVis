@@ -30,7 +30,7 @@ class Camera {
     public startMouseY: number = 0
     public isMouseDown: boolean = false //鼠标是否点击
     public isMoving: boolean = false
-    public cameraChange: boolean = false //相机是否发啊生改变
+    public cameraChanged: boolean = false //相机是否发啊生改变
     private mouseType: number = 0 //鼠标点击类型
     public ratio: number = 0 //缩放比例
     public aspectRatio: number = 0
@@ -66,7 +66,7 @@ class Camera {
         this.gl = gl
         this.Matrix = mat4.create()
         this.updateCameraVectors()
-        this.cameraChange = false
+        this.cameraChanged = false
         this.ratio = 2 * (this.position[2] * Math.tan((this.zoom * Math.PI) / 360))
         let width = this.gl.canvas.width
         let height = this.gl.canvas.height
@@ -228,7 +228,7 @@ class Camera {
                         })
                     }
                 })
-                Throttle(this.events, false, true)
+                Throttle(this.events, true, true)
             }
             this.startMouseX = pointX
             this.startMouseY = pointY
@@ -254,7 +254,7 @@ class Camera {
      * @param viewChange 是否刷新视图
      */
     updateCameraVectors(viewChange: boolean = false) {
-        this.cameraChange = true
+        this.cameraChanged = true
         this.ratio = 2 * (this.position[2] * Math.tan((this.zoom * Math.PI) / 360))
         Throttle(this.events, viewChange)
     }

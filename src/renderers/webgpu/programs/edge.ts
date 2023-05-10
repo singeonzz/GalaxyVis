@@ -30,14 +30,39 @@ export default class EdgeGPUProgram {
     private bindGroupLayout: GPUBindGroupLayout | undefined
     private maxMappingLength: number
     private bindArrowGroupLayout: GPUBindGroupLayout | undefined
-    private matsBindArrowGroupLayout: GPUBindGroupLayout | undefined
     private arrowPipeline: GPURenderPipeline | undefined
     private hasArrowInit = true
+
+    private plotsDefPoint: Float32Array
+    private plotsTwoPoint: Float32Array
+    private plotsDefNormal: Float32Array
+    private plotsTwoNormal: Float32Array
+
+    private uniformBufferData: Float32Array
+    private uniformBufferArrowData: Float32Array
+
+    private groups: any[]
+    private arrowGroups: any[]
+    private bindGroups: any[]
+    private arrowBindGroups: any[]
 
     constructor(graph: any) {
         this.graph = graph
         this.gpu = graph.gpu
         this.maxMappingLength = (14 * 1024 * 1024) / Float32Array.BYTES_PER_ELEMENT
+
+        this.groups = new Array()
+        this.arrowGroups = new Array()
+        this.bindGroups = new Array()
+        this.arrowBindGroups = new Array()
+
+        this.plotsDefPoint = new Float32Array()
+        this.plotsTwoPoint = new Float32Array()
+        this.plotsDefNormal = new Float32Array()
+        this.plotsTwoNormal = new Float32Array()
+
+        this.uniformBufferData = new Float32Array()
+        this.uniformBufferArrowData = new Float32Array()
     }
 
     async initPineLine() {
@@ -158,7 +183,7 @@ export default class EdgeGPUProgram {
             ],
         }))
 
-        const matsBindGroupLayout = (this.matsBindArrowGroupLayout = device.createBindGroupLayout({
+        const matsBindGroupLayout = device.createBindGroupLayout({
             entries: [
                 {
                     binding: 0,
@@ -169,7 +194,7 @@ export default class EdgeGPUProgram {
                     },
                 },
             ],
-        }))
+        })
 
         const pipelineLayout = device.createPipelineLayout({
             bindGroupLayouts: [bindGroupLayout, matsBindGroupLayout],
@@ -241,7 +266,9 @@ export default class EdgeGPUProgram {
         this.hasArrowInit = false
     }
 
-    async render(passEncoder: any) {
+    async render(passEncoder: any, opts: any) {
+        let { cameraChanged } = opts
+
         this.isInit && (await this.initPineLine())
         this.hasArrowInit && (await this.initArrowPineLine())
 
@@ -249,25 +276,10 @@ export default class EdgeGPUProgram {
         const camera = graph.camera
         const graphId = graph.id
         const { device, canvas } = this.gpu
-
-        // 获取线集合
-        let { lineDrawCount: edgeArray, num, plotNum } = this.graph.getEdgeWithArrow()
-
-        let edgeBoundBox = basicData[graphId].edgeBoundBox
-        let edgeList = basicData[graphId].edgeList
-
-        let plotsDefPoint = new Float32Array(num * edgeGroups * 4)
-        let plotsTwoPoint = new Float32Array(plotNum * twoGroup * 4)
-
-        let plotsDefNormal = new Float32Array(num * edgeGroups * 4)
-        let plotsTwoNormal = new Float32Array(plotNum * twoGroup * 4)
-
-        let defL = 0,
-            twoL = 0
-
-        const bindGroups = new Array(num + plotNum)
+        const edges = graph.getEdges()
+        const elength = edges.size
         // 绘制个数
-        const numTriangles = num + plotNum
+        const numTriangles = elength
         if (!numTriangles) return
 
         // uniform属性
@@ -279,101 +291,134 @@ export default class EdgeGPUProgram {
             size: numTriangles * alignedUniformBytes + Float32Array.BYTES_PER_ELEMENT * 16 * 2,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
         })
-        const uniformBufferData = new Float32Array(numTriangles * alignedUniformFloats)
 
-        let groups = new Array(),
-            def = new Array(),
-            two = new Array()
+        if (!cameraChanged) {
+            this.uniformBufferData = new Float32Array(numTriangles * alignedUniformFloats)
 
-        let arrowGroups = new Array(),
-            defArrow = new Array(),
-            twoArrow = new Array()
+            this.bindGroups = new Array(elength)
 
-        // to do 提取到@computer中
-        edgeArray.forEach((item: any[]) => {
-            let r2 = item[2]
-            let r2L = r2.length
-            let hasArrow = false
-            let id = item[3]
-            let edgeGroup = item[4]
+            // 获取线集合
+            let { lineDrawCount: edgeArray, num, plotNum } = this.graph.getEdgeWithArrow()
 
-            let boundBox = edgeBoundBox.get(id)
-            let { attrNormal, width, attrMiter, points: attrPoint } = boundBox.points
-            let color = edgeList.get(id)?.getAttribute('color') || '#eee'
-            let colorFloat = newfloatColor(color)
+            if (num + plotNum != elength) return
 
-            if (r2[r2L - 1] == 1) {
-                hasArrow = true
-                let obj = {
-                    x: r2[r2L - 5],
-                    y: r2[r2L - 4],
-                    angle: r2[r2L - 3],
-                    sx: r2[r2L - 2],
-                    type: r2[r2L - 1],
-                    width,
-                    colorFloat,
+            let edgeBoundBox = basicData[graphId].edgeBoundBox
+            let edgeList = basicData[graphId].edgeList
+
+            this.plotsDefPoint = new Float32Array(num * edgeGroups * 4)
+            this.plotsTwoPoint = new Float32Array(plotNum * twoGroup * 4)
+
+            this.plotsDefNormal = new Float32Array(num * edgeGroups * 4)
+            this.plotsTwoNormal = new Float32Array(plotNum * twoGroup * 4)
+
+            let defL = 0,
+                twoL = 0
+
+            this.groups = new Array()
+            let def = new Array(),
+                two = new Array()
+
+            this.arrowGroups = new Array()
+
+            let defArrow = new Array(),
+                twoArrow = new Array()
+
+            // to do 提取到@computer中
+            edgeArray.forEach((item: any[]) => {
+                let r2 = item[2]
+                let r2L = r2.length
+                let hasArrow = false
+                let id = item[3]
+                let edgeGroup = item[4]
+
+                let boundBox = edgeBoundBox.get(id)
+                let { attrNormal, width, attrMiter, points: attrPoint } = boundBox.points
+
+                let edge = edgeList.get(id)
+
+                let isSelected = edge?.getAttribute('isSelect')
+
+                let color =
+                    (!isSelected
+                        ? edge?.getAttribute('color')
+                        : edge?.getAttribute('selectedColor')) || '#eee'
+
+                let colorFloat = newfloatColor(color)
+
+                if (r2[r2L - 1] == 1) {
+                    hasArrow = true
+                    let obj = {
+                        x: r2[r2L - 5],
+                        y: r2[r2L - 4],
+                        angle: r2[r2L - 3],
+                        sx: r2[r2L - 2],
+                        type: r2[r2L - 1],
+                        width,
+                        colorFloat,
+                    }
+                    if (edgeGroup == edgeGroups) {
+                        defArrow.push(obj)
+                    } else {
+                        twoArrow.push(obj)
+                    }
                 }
+
+                // 曲线
                 if (edgeGroup == edgeGroups) {
-                    defArrow.push(obj)
-                } else {
-                    twoArrow.push(obj)
+                    for (let i = 0, j = 0; i < attrPoint.length; i += 2, j += 1) {
+                        this.plotsDefPoint[defL * edgeGroups * 4 + i] = attrPoint[i]
+                        this.plotsDefPoint[defL * edgeGroups * 4 + i + 1] = attrPoint[i + 1]
+
+                        this.plotsDefNormal[defL * edgeGroups * 4 + i] =
+                            attrNormal[i] * attrMiter[j] * width
+                        this.plotsDefNormal[defL * edgeGroups * 4 + i + 1] =
+                            attrNormal[i + 1] * attrMiter[j] * width
+                    }
+                    defL++
+                    def.push({ color: colorFloat, width, hasArrow })
                 }
-            }
+                // 直线
+                else {
+                    for (let i = 0, j = 0; i < attrPoint.length; i += 2, j += 1) {
+                        this.plotsTwoPoint[twoL * twoGroup * 4 + i] = attrPoint[i]
+                        this.plotsTwoPoint[twoL * twoGroup * 4 + i + 1] = attrPoint[i + 1]
 
-            // 曲线
-            if (edgeGroup == edgeGroups) {
-                for (let i = 0, j = 0; i < attrPoint.length; i += 2, j += 1) {
-                    plotsDefPoint[defL * edgeGroups * 4 + i] = attrPoint[i]
-                    plotsDefPoint[defL * edgeGroups * 4 + i + 1] = attrPoint[i + 1]
-
-                    plotsDefNormal[defL * edgeGroups * 4 + i] = attrNormal[i] * attrMiter[j] * width
-                    plotsDefNormal[defL * edgeGroups * 4 + i + 1] =
-                        attrNormal[i + 1] * attrMiter[j] * width
+                        this.plotsTwoNormal[twoL * twoGroup * 4 + i] =
+                            attrNormal[i] * attrMiter[j] * width
+                        this.plotsTwoNormal[twoL * twoGroup * 4 + i + 1] =
+                            attrNormal[i + 1] * attrMiter[j] * width
+                    }
+                    twoL++
+                    two.push({ color: colorFloat, width, hasArrow })
                 }
-                defL++
-                def.push({ color: colorFloat, width, hasArrow })
-            }
-            // 直线
-            else {
-                for (let i = 0, j = 0; i < attrPoint.length; i += 2, j += 1) {
-                    plotsTwoPoint[twoL * twoGroup * 4 + i] = attrPoint[i]
-                    plotsTwoPoint[twoL * twoGroup * 4 + i + 1] = attrPoint[i + 1]
-
-                    plotsTwoNormal[twoL * twoGroup * 4 + i] = attrNormal[i] * attrMiter[j] * width
-                    plotsTwoNormal[twoL * twoGroup * 4 + i + 1] =
-                        attrNormal[i + 1] * attrMiter[j] * width
-                }
-                twoL++
-                two.push({ color: colorFloat, width, hasArrow })
-            }
-        })
-
-        groups = [...two, ...def]
-
-        groups.forEach((item: any, i: number) => {
-            uniformBufferData[alignedUniformFloats * i + 0] = item.color // color
-            uniformBufferData[alignedUniformFloats * i + 1] = item.width // width
-
-            bindGroups[i] = device.createBindGroup({
-                layout: this.bindGroupLayout as GPUBindGroupLayout,
-                entries: [
-                    {
-                        binding: 0,
-                        resource: {
-                            buffer: uniformBuffer,
-                            offset: i * alignedUniformBytes,
-                            size: ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT,
-                        },
-                    },
-                ],
             })
-        })
 
-        arrowGroups = [...twoArrow, ...defArrow]
+            this.groups = [...two, ...def]
 
-        const arrowNum = arrowGroups.length
+            this.groups.forEach((item: any, i: number) => {
+                this.uniformBufferData[alignedUniformFloats * i + 0] = item.color // color
+                this.uniformBufferData[alignedUniformFloats * i + 1] = item.width // width
 
-        const arrowBindGroups = new Array(arrowNum)
+                this.bindGroups[i] = device.createBindGroup({
+                    layout: this.bindGroupLayout as GPUBindGroupLayout,
+                    entries: [
+                        {
+                            binding: 0,
+                            resource: {
+                                buffer: uniformBuffer,
+                                offset: i * alignedUniformBytes,
+                                size: ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT,
+                            },
+                        },
+                    ],
+                })
+            })
+
+            this.arrowGroups = [...twoArrow, ...defArrow]
+        }
+
+        const arrowNum = this.arrowGroups.length
+
         // 绘制个数
         const numArrows = arrowNum
         // uniform属性
@@ -385,39 +430,43 @@ export default class EdgeGPUProgram {
             size: numArrows * alignedUniformArrowBytes + Float32Array.BYTES_PER_ELEMENT * 16 * 2,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
         })
-        const uniformBufferArrowData = new Float32Array(numArrows * alignedUniformArrowFloats)
 
-        arrowGroups.forEach((item: any, i: number) => {
-            uniformBufferArrowData[alignedUniformArrowFloats * i + 0] = item.x // x
-            uniformBufferArrowData[alignedUniformArrowFloats * i + 1] = item.y // y
-            uniformBufferArrowData[alignedUniformArrowFloats * i + 2] = item.angle // angle
-            uniformBufferArrowData[alignedUniformArrowFloats * i + 3] = item.sx // sx
-            // uniformBufferArrowData[alignedUniformArrowFloats * i + 4] = item.type; // type
-            uniformBufferArrowData[alignedUniformArrowFloats * i + 4] = item.width // width
-            uniformBufferArrowData[alignedUniformArrowFloats * i + 5] = item.colorFloat // color
+        if (!cameraChanged) {
+            this.uniformBufferArrowData = new Float32Array(numArrows * alignedUniformArrowFloats)
 
-            arrowBindGroups[i] = device.createBindGroup({
-                layout: this.bindArrowGroupLayout as GPUBindGroupLayout,
-                entries: [
-                    {
-                        binding: 0,
-                        resource: {
-                            buffer: uniformArrowBuffer,
-                            offset: i * alignedUniformArrowBytes,
-                            size: ARROWATTRIBUTES * Float32Array.BYTES_PER_ELEMENT,
+            this.arrowBindGroups = new Array(arrowNum)
+
+            this.arrowGroups.forEach((item: any, i: number) => {
+                this.uniformBufferArrowData[alignedUniformArrowFloats * i + 0] = item.x // x
+                this.uniformBufferArrowData[alignedUniformArrowFloats * i + 1] = item.y // y
+                this.uniformBufferArrowData[alignedUniformArrowFloats * i + 2] = item.angle // angle
+                this.uniformBufferArrowData[alignedUniformArrowFloats * i + 3] = item.sx // sx
+                this.uniformBufferArrowData[alignedUniformArrowFloats * i + 4] = item.width // width
+                this.uniformBufferArrowData[alignedUniformArrowFloats * i + 5] = item.colorFloat // color
+
+                this.arrowBindGroups[i] = device.createBindGroup({
+                    layout: this.bindArrowGroupLayout as GPUBindGroupLayout,
+                    entries: [
+                        {
+                            binding: 0,
+                            resource: {
+                                buffer: uniformArrowBuffer,
+                                offset: i * alignedUniformArrowBytes,
+                                size: ARROWATTRIBUTES * Float32Array.BYTES_PER_ELEMENT,
+                            },
                         },
-                    },
-                ],
+                    ],
+                })
             })
-        })
+        }
 
-        const vertexEdgeTwoBuffer = CreateGPUBuffer(device, plotsTwoPoint)
+        const vertexEdgeTwoBuffer = CreateGPUBuffer(device, this.plotsTwoPoint)
 
-        const vertexEdgeTwoNormalBuffer = CreateGPUBuffer(device, plotsTwoNormal)
+        const vertexEdgeTwoNormalBuffer = CreateGPUBuffer(device, this.plotsTwoNormal)
 
-        const vertexEdgeDefBuffer = CreateGPUBuffer(device, plotsDefPoint)
+        const vertexEdgeDefBuffer = CreateGPUBuffer(device, this.plotsDefPoint)
 
-        const vertexEdgeDefNormalBuffer = CreateGPUBuffer(device, plotsDefNormal)
+        const vertexEdgeDefNormalBuffer = CreateGPUBuffer(device, this.plotsDefNormal)
 
         const projection = mat4.perspective(
             mat4.create(),
@@ -442,29 +491,22 @@ export default class EdgeGPUProgram {
                 },
             ],
         })
-        const matArrowOffset = numArrows * alignedUniformArrowBytes
-        const uniformMatArrowBindGroup = device.createBindGroup({
-            layout: this.matsBindArrowGroupLayout as GPUBindGroupLayout,
-            entries: [
-                {
-                    binding: 0,
-                    resource: {
-                        buffer: uniformArrowBuffer,
-                        offset: matArrowOffset,
-                        size: 64 * 2,
-                    },
-                },
-            ],
-        })
 
-        for (let offset = 0; offset < uniformBufferData.length; offset += this.maxMappingLength) {
-            const uploadCount = Math.min(uniformBufferData.length - offset, this.maxMappingLength)
+        for (
+            let offset = 0;
+            offset < this.uniformBufferData.length;
+            offset += this.maxMappingLength
+        ) {
+            const uploadCount = Math.min(
+                this.uniformBufferData.length - offset,
+                this.maxMappingLength,
+            )
 
             device.queue.writeBuffer(
                 uniformBuffer,
                 offset * Float32Array.BYTES_PER_ELEMENT,
-                uniformBufferData.buffer,
-                uniformBufferData.byteOffset,
+                this.uniformBufferData.buffer,
+                this.uniformBufferData.byteOffset,
                 uploadCount * Float32Array.BYTES_PER_ELEMENT,
             )
         }
@@ -474,57 +516,65 @@ export default class EdgeGPUProgram {
 
         for (
             let offset = 0;
-            offset < uniformBufferArrowData.length;
+            offset < this.uniformBufferArrowData.length;
             offset += this.maxMappingLength
         ) {
             const uploadCount = Math.min(
-                uniformBufferArrowData.length - offset,
+                this.uniformBufferArrowData.length - offset,
                 this.maxMappingLength,
             )
 
             device.queue.writeBuffer(
                 uniformArrowBuffer,
                 offset * Float32Array.BYTES_PER_ELEMENT,
-                uniformBufferArrowData.buffer,
-                uniformBufferArrowData.byteOffset,
+                this.uniformBufferArrowData.buffer,
+                this.uniformBufferArrowData.byteOffset,
                 uploadCount * Float32Array.BYTES_PER_ELEMENT,
             )
         }
-
-        device.queue.writeBuffer(uniformArrowBuffer, matArrowOffset, view as ArrayBuffer)
-        device.queue.writeBuffer(uniformArrowBuffer, matArrowOffset + 64, projection as ArrayBuffer)
 
         let g = 0,
             h = 0
         const vertexBuffer = CreateGPUBuffer(device, arrowVertexData)
 
+        const indexData = new Uint32Array([0, 1, 2, 2, 1, 3])
+        const indexBuffer = CreateGPUBufferUint(device, indexData)
+
         const drawArrow = (h: number) => {
             passEncoder.setPipeline(this.arrowPipeline)
             passEncoder.setVertexBuffer(0, vertexBuffer)
-            passEncoder.setBindGroup(1, uniformMatArrowBindGroup)
-            const indexData = new Uint32Array([0, 1, 2, 2, 1, 3])
-            const indexBuffer = CreateGPUBufferUint(device, indexData)
             passEncoder.setIndexBuffer(indexBuffer, 'uint32')
-            passEncoder.setBindGroup(0, arrowBindGroups[h])
+            passEncoder.setBindGroup(0, this.arrowBindGroups[h])
             passEncoder.drawIndexed(6, 1)
         }
 
         const initTwo = () => {
             passEncoder.setPipeline(this.pipeline)
-            passEncoder.setBindGroup(1, uniformMatBindGroup)
             passEncoder.setVertexBuffer(0, vertexEdgeTwoBuffer)
             passEncoder.setVertexBuffer(1, vertexEdgeTwoNormalBuffer)
         }
 
+        const initDef = () => {
+            passEncoder.setPipeline(this.pipeline)
+            passEncoder.setVertexBuffer(0, vertexEdgeDefBuffer)
+            passEncoder.setVertexBuffer(1, vertexEdgeDefNormalBuffer)
+        }
+
+        passEncoder.setBindGroup(1, uniformMatBindGroup)
         initTwo()
         let reInit = false
+
+        let plotNum = this.plotsTwoPoint.length / (twoGroup * 4)
+
+        let num = this.plotsDefPoint.length / (edgeGroups * 4)
+
         for (let i = 0; i < plotNum; i++) {
             reInit && initTwo()
 
-            passEncoder.setBindGroup(0, bindGroups[g])
+            passEncoder.setBindGroup(0, this.bindGroups[g])
             passEncoder.draw(twoGroup * 2, 1, twoGroup * 2 * i)
 
-            if (groups[g].hasArrow) {
+            if (this.groups[g].hasArrow) {
                 drawArrow(h)
                 h++
                 reInit = true
@@ -534,22 +584,15 @@ export default class EdgeGPUProgram {
             g++
         }
 
-        const initDef = () => {
-            passEncoder.setPipeline(this.pipeline)
-            passEncoder.setBindGroup(1, uniformMatBindGroup)
-            passEncoder.setVertexBuffer(0, vertexEdgeDefBuffer)
-            passEncoder.setVertexBuffer(1, vertexEdgeDefNormalBuffer)
-        }
-
         reInit = false
         initDef()
         for (let i = 0; i < num; i++) {
             reInit && initDef()
 
-            passEncoder.setBindGroup(0, bindGroups[g])
+            passEncoder.setBindGroup(0, this.bindGroups[g])
             passEncoder.draw(edgeGroups * 2, 1, edgeGroups * 2 * i)
 
-            if (groups[g].hasArrow) {
+            if (this.groups[g].hasArrow) {
                 drawArrow(h)
                 h++
                 reInit = true

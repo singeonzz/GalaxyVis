@@ -20,6 +20,8 @@ export default class NodeGPUProgram {
     private bindGroupLayout: GPUBindGroupLayout | undefined
     private matsBindGroupLayout: GPUBindGroupLayout | undefined
     private pipeline: GPURenderPipeline | undefined
+    private uniformBufferData: Float32Array
+    private bindGroups!: any[]
     private isInit = true
     private ts:
         | {
@@ -32,6 +34,10 @@ export default class NodeGPUProgram {
         this.graph = graph
         this.gpu = graph.gpu
         this.maxMappingLength = (14 * 1024 * 1024) / Float32Array.BYTES_PER_ELEMENT
+
+        this.bindGroups = new Array()
+
+        this.uniformBufferData = new Float32Array()
     }
 
     async initPineLine() {
@@ -148,7 +154,9 @@ export default class NodeGPUProgram {
         this.ts = globalProp.gpuTexture
     }
 
-    async render(passEncoder: any) {
+    async render(passEncoder: any, opts: any) {
+        let { cameraChanged } = opts
+
         this.isInit && (await this.initPineLine())
 
         this.ts = globalProp.gpuTexture
@@ -197,7 +205,7 @@ export default class NodeGPUProgram {
         // 绘制个数
         const numTriangles = drawNodeList.size || nodes.size
 
-        if(!numTriangles) return;
+        if (!numTriangles) return
 
         // uniform属性
         const uniformBytes = ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT
@@ -208,15 +216,6 @@ export default class NodeGPUProgram {
             size: numTriangles * alignedUniformBytes + Float32Array.BYTES_PER_ELEMENT * 16 * 2,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
         })
-
-        // 创建Data
-        const uniformBufferData = new Float32Array(numTriangles * alignedUniformFloats)
-
-        const bindGroups = new Array(numTriangles)
-
-        const atlas = globalProp.atlas
-        const iconMap = globalProp.iconMap
-        const wid = 128
 
         function addUniformData(
             i: number,
@@ -230,20 +229,20 @@ export default class NodeGPUProgram {
             uv_x: number,
             uv_y: number,
         ) {
-            uniformBufferData[alignedUniformFloats * i + 0] = zoomResults // scale
-            uniformBufferData[alignedUniformFloats * i + 1] = offsets[0] // x
-            uniformBufferData[alignedUniformFloats * i + 2] = offsets[1] // y
-            uniformBufferData[alignedUniformFloats * i + 3] = colorFloat // floatColor
-            uniformBufferData[alignedUniformFloats * i + 4] = strokeWidth // StrokeWidth
-            uniformBufferData[alignedUniformFloats * i + 5] = strokeColor // StrokeColor
+            that.uniformBufferData[alignedUniformFloats * i + 0] = zoomResults // scale
+            that.uniformBufferData[alignedUniformFloats * i + 1] = offsets[0] // x
+            that.uniformBufferData[alignedUniformFloats * i + 2] = offsets[1] // y
+            that.uniformBufferData[alignedUniformFloats * i + 3] = colorFloat // floatColor
+            that.uniformBufferData[alignedUniformFloats * i + 4] = strokeWidth // StrokeWidth
+            that.uniformBufferData[alignedUniformFloats * i + 5] = strokeColor // StrokeColor
 
-            uniformBufferData[alignedUniformFloats * i + 6] = iconType // iconType
-            uniformBufferData[alignedUniformFloats * i + 7] = iconColor // iconColor
+            that.uniformBufferData[alignedUniformFloats * i + 6] = iconType // iconType
+            that.uniformBufferData[alignedUniformFloats * i + 7] = iconColor // iconColor
 
-            uniformBufferData[alignedUniformFloats * i + 8] = uv_x // uv_x
-            uniformBufferData[alignedUniformFloats * i + 9] = uv_y // uv_y
+            that.uniformBufferData[alignedUniformFloats * i + 8] = uv_x // uv_x
+            that.uniformBufferData[alignedUniformFloats * i + 9] = uv_y // uv_y
 
-            bindGroups[i] = device.createBindGroup({
+            that.bindGroups[i] = device.createBindGroup({
                 layout: that.bindGroupLayout as GPUBindGroupLayout,
                 entries: [
                     {
@@ -257,120 +256,144 @@ export default class NodeGPUProgram {
                 ],
             })
         }
-        let nodeIndex = 0
-        nodes.forEach((item: any) => {
-            let id = item.getId();
 
-            let { x, y, radius, color, innerStroke, isSelect, image, icon, badges, shape } =
-                item.getAttribute()
+        if (!cameraChanged) {
+            // 创建Data
+            this.uniformBufferData = new Float32Array(numTriangles * alignedUniformFloats)
 
-            let zoomResults: number = Math.ceil((radius / globalProp.standardRadius) * 1e2) / 1e3
+            this.bindGroups = new Array(numTriangles)
 
-            let offsets: number[] = coordTransformation(graphId, x, y, transform)
+            const atlas = globalProp.atlas
+            const iconMap = globalProp.iconMap
+            const wid = 128
 
-            let colorFloat = newfloatColor(color)
+            let nodeIndex = 0
+            nodes.forEach((item: any) => {
+                let id = item.getId()
 
-            let strokeWidth = (Number(innerStroke?.width) >= 0 ? innerStroke.width : 2) / 1e2
+                let { x, y, radius, color, innerStroke, isSelect, image, icon, badges, shape } =
+                    item.getAttribute()
 
-            let iconNum: number = image.url
-                ? iconMap.get(image.url + color)?.num
-                : iconMap.get(icon.content)?.num
+                let zoomResults: number =
+                    Math.ceil((radius / globalProp.standardRadius) * 1e2) / 1e3
 
-            let iconType = image.url ? 1 : icon.content != '' ? 2 : 3
+                let offsets: number[] = coordTransformation(graphId, x, y, transform)
 
-            if (!iconNum) {
-                iconNum = 0
-            }
-            let iconColor = newfloatColor(icon?.color || '#f00')
-            let uv_x = ((wid * iconNum) % (wid * atlas)) / (wid * atlas),
-                uv_y = 1 - (wid + wid * Math.floor(iconNum / atlas)) / (wid * atlas)
+                let colorFloat = newfloatColor(color)
 
-            let strokeColor
-            if (isSelect) {
-                strokeColor = newfloatColor(innerStroke?.selectedColor || innerStroke || '#fff')
-            } else {
-                strokeColor = newfloatColor(innerStroke?.color || innerStroke || '#fff')
-            }
+                let strokeWidth = (Number(innerStroke?.width) >= 0 ? innerStroke.width : 2) / 1e2
 
-            if (graph.textStatus) {
-                camera.quad.insert({
-                    x: offsets[0],
-                    y: offsets[1],
-                    height: zoomResults * 2,
-                    width: zoomResults * 2,
-                    id,
-                    isNode: true,
-                    shape,
-                })
-            }
+                let iconNum: number = image.url
+                    ? iconMap.get(image.url + color)?.num
+                    : iconMap.get(icon.content)?.num
 
-            addUniformData(
-                nodeIndex++,
-                zoomResults,
-                offsets,
-                colorFloat,
-                strokeWidth,
-                strokeColor,
-                iconType,
-                iconColor,
-                uv_x,
-                uv_y,
-            )
+                let iconType = image.url ? 1 : icon.content != '' ? 2 : 3
 
-            if (badges) {
-                let badgesArray = Object.keys(badges)
-                for (let i = 0; i < badgesArray.length; i++) {
-                    let {
-                        color: badgesColor,
-                        scale,
-                        text,
-                        stroke,
-                        image,
-                        postion,
-                    } = badges[badgesArray[i]]
-                    badgesColor =
-                        badgesColor == 'inherit'
-                            ? colorFloat
-                            : badgesColor
-                            ? newfloatColor(badgesColor)
-                            : newfloatColor('#fff')
-                    scale = scale || 0.35
-                    let innerWidth = Number(stroke?.width) >= 0 ? stroke.width : 2
-                    let zoomResults2 = zoomResults
-                    let size = zoomResults2 * scale
-
-                    postion = badgesArray[i] || 'bottomRight'
-
-                    let direction = globalProp.direction
-
-                    let x = offsets[0] + direction[postion][0] * zoomResults * 0.6,
-                        y = offsets[1] - direction[postion][1] * zoomResults * 0.6
-                    let iconType = image ? 1 : text?.content != '' ? 2 : 3
-                    let badgesIconColor = newfloatColor(text?.color || '#f00')
-                    let iconNum: number = image
-                        ? iconMap.get(image)?.num
-                        : iconMap.get(text?.content || '')?.num
-
-                    let uv_x = ((wid * iconNum) % (wid * atlas)) / (wid * atlas),
-                        uv_y = 1 - (wid + wid * Math.floor(iconNum / atlas)) / (wid * atlas)
-
-                    addUniformData(
-                        nodeIndex++,
-                        size,
-                        [x,y],
-                        badgesColor,
-                        innerWidth / 1e2,
-                        newfloatColor(stroke?.color || '#fff'),
-                        iconType,
-                        badgesIconColor,
-                        uv_x,
-                        uv_y,
-                    )
+                if (!iconNum) {
+                    iconNum = 0
                 }
-            }
-        })
+                let iconColor = newfloatColor(icon?.color || '#f00')
+                let uv_x = ((wid * iconNum) % (wid * atlas)) / (wid * atlas),
+                    uv_y = 1 - (wid + wid * Math.floor(iconNum / atlas)) / (wid * atlas)
 
-        // console.log(uniformBufferData,"uniformBufferData")
+                let strokeColor
+                if (isSelect) {
+                    strokeColor = newfloatColor(innerStroke?.selectedColor || innerStroke || '#fff')
+                } else {
+                    strokeColor = newfloatColor(innerStroke?.color || innerStroke || '#fff')
+                }
+
+                // if (graph.textStatus) {
+                //     camera.quad.insert({
+                //         x: offsets[0],
+                //         y: offsets[1],
+                //         height: zoomResults * 2,
+                //         width: zoomResults * 2,
+                //         id,
+                //         isNode: true,
+                //         shape,
+                //     })
+                // }
+
+                // boundBox.set(id, {
+                //     xmax: 0.1 * zoomResults + offsets[0],
+                //     xmin: -0.1 * zoomResults + offsets[0],
+                //     ymax: 0.1 * zoomResults + offsets[1],
+                //     ymin: -0.1 * zoomResults + offsets[1],
+                //     // 确定包围盒后 用来判断是否在图形里面
+                //     radius: zoomResults * 0.1,
+                //     num: value.num,
+                //     shape,
+                // })
+
+                addUniformData(
+                    nodeIndex++,
+                    zoomResults,
+                    offsets,
+                    colorFloat,
+                    strokeWidth,
+                    strokeColor,
+                    iconType,
+                    iconColor,
+                    uv_x,
+                    uv_y,
+                )
+
+                if (badges) {
+                    let badgesArray = Object.keys(badges)
+                    for (let i = 0; i < badgesArray.length; i++) {
+                        let {
+                            color: badgesColor,
+                            scale,
+                            text,
+                            stroke,
+                            image,
+                            postion,
+                        } = badges[badgesArray[i]]
+                        badgesColor =
+                            badgesColor == 'inherit'
+                                ? colorFloat
+                                : badgesColor
+                                ? newfloatColor(badgesColor)
+                                : newfloatColor('#fff')
+                        scale = scale || 0.35
+                        let innerWidth = Number(stroke?.width) >= 0 ? stroke.width : 2
+                        let zoomResults2 = zoomResults
+                        let size = zoomResults2 * scale
+
+                        postion = badgesArray[i] || 'bottomRight'
+
+                        let direction = globalProp.direction
+
+                        let x = offsets[0] + direction[postion][0] * zoomResults * 0.6,
+                            y = offsets[1] - direction[postion][1] * zoomResults * 0.6
+                        let iconType = image ? 1 : text?.content != '' ? 2 : 3
+                        let badgesIconColor = newfloatColor(text?.color || '#f00')
+                        let iconNum: number = image
+                            ? iconMap.get(image)?.num
+                            : iconMap.get(text?.content || '')?.num
+
+                        let uv_x = ((wid * iconNum) % (wid * atlas)) / (wid * atlas),
+                            uv_y = 1 - (wid + wid * Math.floor(iconNum / atlas)) / (wid * atlas)
+
+                        addUniformData(
+                            nodeIndex++,
+                            size,
+                            [x, y],
+                            badgesColor,
+                            innerWidth / 1e2,
+                            newfloatColor(stroke?.color || '#fff'),
+                            iconType,
+                            badgesIconColor,
+                            uv_x,
+                            uv_y,
+                        )
+                    }
+                }
+            })
+        }
+
+        if(!this.uniformBufferData.length) return;
 
         const projection = mat4.perspective(
             mat4.create(),
@@ -403,14 +426,21 @@ export default class NodeGPUProgram {
             ],
         })
 
-        for (let offset = 0; offset < uniformBufferData.length; offset += this.maxMappingLength) {
-            const uploadCount = Math.min(uniformBufferData.length - offset, this.maxMappingLength)
+        for (
+            let offset = 0;
+            offset < this.uniformBufferData.length;
+            offset += this.maxMappingLength
+        ) {
+            const uploadCount = Math.min(
+                this.uniformBufferData.length - offset,
+                this.maxMappingLength,
+            )
 
             device.queue.writeBuffer(
                 uniformBuffer,
                 offset * Float32Array.BYTES_PER_ELEMENT,
-                uniformBufferData.buffer,
-                uniformBufferData.byteOffset,
+                this.uniformBufferData.buffer,
+                this.uniformBufferData.byteOffset,
                 uploadCount * Float32Array.BYTES_PER_ELEMENT,
             )
         }
@@ -429,7 +459,7 @@ export default class NodeGPUProgram {
         passEncoder.setIndexBuffer(indexBuffer, 'uint32')
 
         for (let i = 0; i < numTriangles; ++i) {
-            passEncoder.setBindGroup(0, bindGroups[i])
+            passEncoder.setBindGroup(0, this.bindGroups[i])
 
             passEncoder.drawIndexed(6, 1)
         }

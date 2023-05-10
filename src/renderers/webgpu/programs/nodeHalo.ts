@@ -22,11 +22,19 @@ export default class NodeHaloGPUProgram {
     private matsBindGroupLayout: GPUBindGroupLayout | undefined
     private pipeline: GPURenderPipeline | undefined
     private isInit = true
+    private bindGroups: any[]
+    private uniformBufferData: Float32Array
+    private edgeHalo: EdgeHaloGPUProgram
 
     constructor(graph: any) {
         this.graph = graph
         this.gpu = graph.gpu
         this.maxMappingLength = (14 * 1024 * 1024) / Float32Array.BYTES_PER_ELEMENT
+
+        this.bindGroups = new Array()
+
+        this.uniformBufferData = new Float32Array()
+        this.edgeHalo = new EdgeHaloGPUProgram(this.graph)
     }
 
     async initPineLine() {
@@ -126,12 +134,12 @@ export default class NodeHaloGPUProgram {
         })
 
         this.isInit = false
-
     }
 
-    async render(passEncoder: any) {
+    async render(passEncoder: any, opts: any) {
+        await this.edgeHalo.render(passEncoder, opts)
 
-        await new EdgeHaloGPUProgram(this.graph).render(passEncoder)
+        let { cameraChanged } = opts
 
         this.isInit && (await this.initPineLine())
 
@@ -156,11 +164,11 @@ export default class NodeHaloGPUProgram {
 
         // badges;
         nodes.forEach((item: any) => {
-            let id = item.getId();
+            let id = item.getId()
             let { halo } = item.getAttribute()
 
-            let { width } = halo;
-            if(width && width > 0){
+            let { width } = halo
+            if (width && width > 0) {
                 drawNodeList.set(id, item)
             }
         })
@@ -168,7 +176,7 @@ export default class NodeHaloGPUProgram {
         // 绘制个数
         const numTriangles = drawNodeList.size
 
-        if(!numTriangles) return;
+        if (!numTriangles) return
 
         // uniform属性
         const uniformBytes = ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT
@@ -180,25 +188,18 @@ export default class NodeHaloGPUProgram {
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
         })
 
-        // 创建Data
-        const uniformBufferData = new Float32Array(numTriangles * alignedUniformFloats)
-
-        const bindGroups = new Array(numTriangles)
-
-
         function addUniformData(
             i: number,
             zoomResults: number,
             offsets: number[],
             colorFloat: number,
-    
         ) {
-            uniformBufferData[alignedUniformFloats * i + 0] = zoomResults // scale
-            uniformBufferData[alignedUniformFloats * i + 1] = offsets[0] // x
-            uniformBufferData[alignedUniformFloats * i + 2] = offsets[1] // y
-            uniformBufferData[alignedUniformFloats * i + 3] = colorFloat // floatColor
-     
-            bindGroups[i] = device.createBindGroup({
+            that.uniformBufferData[alignedUniformFloats * i + 0] = zoomResults // scale
+            that.uniformBufferData[alignedUniformFloats * i + 1] = offsets[0] // x
+            that.uniformBufferData[alignedUniformFloats * i + 2] = offsets[1] // y
+            that.uniformBufferData[alignedUniformFloats * i + 3] = colorFloat // floatColor
+
+            that.bindGroups[i] = device.createBindGroup({
                 layout: that.bindGroupLayout as GPUBindGroupLayout,
                 entries: [
                     {
@@ -212,28 +213,33 @@ export default class NodeHaloGPUProgram {
                 ],
             })
         }
-        let nodeIndex = 0
-        drawNodeList.forEach((item: any) => {
-            let { x, y, halo, radius } = item.getAttribute()
 
-            let { color, width } = halo;
+        if (!cameraChanged) {
+            this.bindGroups = new Array(numTriangles)
+            // 创建Data
+            this.uniformBufferData = new Float32Array(numTriangles * alignedUniformFloats)
 
-            let haloRadius = Number(radius + width / 2)
-    
-            // 真实的r比例
-            let zoomResults: number = Math.ceil((haloRadius / globalProp.standardRadius) * 1e2) / 1e3
+            let nodeIndex = 0
+            drawNodeList.forEach((item: any) => {
+                let { x, y, halo, radius } = item.getAttribute()
 
-            let offsets: number[] = coordTransformation(graphId, x, y, transform)
+                let { color, width } = halo
 
-            let colorFloat = newfloatColor(color)
-       
-            addUniformData(
-                nodeIndex++,
-                zoomResults,
-                offsets,
-                colorFloat,
-            )
-        })
+                let haloRadius = Number(radius + width / 2)
+
+                // 真实的r比例
+                let zoomResults: number =
+                    Math.ceil((haloRadius / globalProp.standardRadius) * 1e2) / 1e3
+
+                let offsets: number[] = coordTransformation(graphId, x, y, transform)
+
+                let colorFloat = newfloatColor(color)
+
+                addUniformData(nodeIndex++, zoomResults, offsets, colorFloat)
+            })
+        }
+
+        if(!this.uniformBufferData.length) return;
 
         const projection = mat4.perspective(
             mat4.create(),
@@ -258,14 +264,14 @@ export default class NodeHaloGPUProgram {
             ],
         })
 
-        for (let offset = 0; offset < uniformBufferData.length; offset += this.maxMappingLength) {
-            const uploadCount = Math.min(uniformBufferData.length - offset, this.maxMappingLength)
+        for (let offset = 0; offset < this.uniformBufferData.length; offset += this.maxMappingLength) {
+            const uploadCount = Math.min(this.uniformBufferData.length - offset, this.maxMappingLength)
 
             device.queue.writeBuffer(
                 uniformBuffer,
                 offset * Float32Array.BYTES_PER_ELEMENT,
-                uniformBufferData.buffer,
-                uniformBufferData.byteOffset,
+                this.uniformBufferData.buffer,
+                this.uniformBufferData.byteOffset,
                 uploadCount * Float32Array.BYTES_PER_ELEMENT,
             )
         }
@@ -284,7 +290,7 @@ export default class NodeHaloGPUProgram {
         passEncoder.setIndexBuffer(indexBuffer, 'uint32')
 
         for (let i = 0; i < numTriangles; ++i) {
-            passEncoder.setBindGroup(0, bindGroups[i])
+            passEncoder.setBindGroup(0, this.bindGroups[i])
 
             passEncoder.drawIndexed(6, 1)
         }

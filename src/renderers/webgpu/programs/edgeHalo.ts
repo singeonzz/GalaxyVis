@@ -24,11 +24,28 @@ export default class EdgeHaloGPUProgram {
     private isInit = true
     private bindGroupLayout: GPUBindGroupLayout | undefined
     private maxMappingLength: number
+    private plotsDefPoint: Float32Array
+    private plotsTwoPoint: Float32Array
+    private plotsDefNormal: Float32Array
+    private plotsTwoNormal: Float32Array
+    private uniformBufferData: Float32Array
+
+    private bindGroups: any[]
 
     constructor(graph: any) {
         this.graph = graph
         this.gpu = graph.gpu
         this.maxMappingLength = (14 * 1024 * 1024) / Float32Array.BYTES_PER_ELEMENT
+
+        this.uniformBufferData = new Float32Array()
+
+        this.plotsDefPoint = new Float32Array()
+        this.plotsTwoPoint = new Float32Array()
+
+        this.plotsDefNormal = new Float32Array()
+        this.plotsTwoNormal = new Float32Array()
+
+        this.bindGroups = new Array()
     }
 
     async initPineLine() {
@@ -59,7 +76,7 @@ export default class EdgeHaloGPUProgram {
                 },
             ],
         }))
-        
+
         const pipelineLayout = device.createPipelineLayout({
             bindGroupLayouts: [bindGroupLayout, matsBindGroupLayout],
         })
@@ -133,7 +150,8 @@ export default class EdgeHaloGPUProgram {
         this.isInit = false
     }
 
-    async render(passEncoder: any) {
+    async render(passEncoder: any, opts: any) {
+        let { cameraChanged } = opts
 
         this.isInit && (await this.initPineLine())
 
@@ -143,110 +161,27 @@ export default class EdgeHaloGPUProgram {
         const { device, canvas } = this.gpu
 
         let edgeList = basicData[graphId].edgeList
-        
-        let baseTypeHash = this.graph.getEdgeType().baseTypeHash
-        let forwadHashTable: any = new Map()
-        let num = 0, plotNum = 0;
-        let drawLineHaloArray = new Array();
+        const drawEdgeList = new Set()
 
-        try {
-            for (let [key, value] of edgeList) {
-                // 获取点属性
-                let attribute = value.getAttribute()
-                if (!attribute) continue
-                let { isVisible, halo, type, opacity, location } = attribute,
-                    source = value.getSource(),
-                    target = value.getTarget()
+        for (let [key, value] of edgeList) {
+            let attribute = value.getAttribute()
+            if (!attribute) continue
+            let { isVisible, halo } = attribute,
+                source = value.getSource(),
+                target = value.getTarget()
+            if (!isVisible || typeof source == 'string' || typeof target == 'string') continue
+            if (typeof source == 'undefined' || typeof target == 'undefined') continue
 
-                // 如果被隐藏则跳过
-                if (!isVisible || typeof source == 'string' || typeof target == 'string') continue
-                if (typeof source == 'undefined' || typeof target == 'undefined') continue
-                let { attribute: souce_attribute, num: sourceNumber } = source.value,
-                    { attribute: target_attribute, num: targetNumber } = target.value
-                if (type == 'basic') {
-                    let hash = hashNumber(sourceNumber, targetNumber), //两点之间的hash值
-                        hashSet = baseTypeHash?.get(hash), //两点之间hash表
-                        size = hashSet?.num
-                    if (!size) continue
-
-                    let lineNumber = [...hashSet.total].indexOf(key);
-
-                    if (globalInfo[graphId].enabledNoStraightLine) {
-                        size == 1 && size++
-                        size % 2 !== 0 && lineNumber++
-                    }
-
-                    let forwardSource = forwadHashTable?.get(hash)?.sourceNumber,
-                        forward =
-                            lineNumber == 0
-                                ? 1
-                                : size % 2 == 0
-                                    ? lineNumber % 2 == 1 && sourceNumber != forwardSource
-                                        ? -1
-                                        : 1
-                                    : lineNumber % 2 == 0 && sourceNumber != forwardSource
-                                        ? -1
-                                        : 1,
-                        { x: targetX, y: targetY, radius: targetSize } = target_attribute,
-                        { x: sourceX, y: sourceY, radius: sourceSize } = souce_attribute
-                    let xyOffect = coordTransformation(graphId, sourceX, sourceY),
-                        xyOffect2 = coordTransformation(graphId, targetX, targetY),
-                        line
-                        ; (sourceX = xyOffect[0]),
-                            (sourceY = xyOffect[1]),
-                            (targetX = xyOffect2[0]),
-                            (targetY = xyOffect2[1])
-                    halo.location = location
-                    forwadHashTable?.set(hash, { sourceNumber, targetNumber })
-                    // 如果宽度为0则跳过
-                    if (halo?.width == 0 || !halo) continue
-                    if (source != target) {
-                        size > 1 && size % 2 == 0 && lineNumber++
-                        line = createLineMesh(
-                            2,
-                            sourceX,
-                            sourceY,
-                            targetX,
-                            targetY,
-                            lineNumber,
-                            halo,
-                            targetSize,
-                            'circle',
-                            forward,
-                        )
-                    } else {
-                        line = loopLineMesh(
-                            'webgl',
-                            sourceX,
-                            sourceY,
-                            lineNumber,
-                            100,
-                            halo,
-                            sourceSize,
-                        )
-                    }
-                    if(line.bezierNumber == twoGroup) plotNum++;
-                    else num++;
-
-                    drawLineHaloArray.push({...line.points, edgeGroup:line.bezierNumber, id: key})
-                }
+            let { width } = halo
+            if (width && width > 0) {
+                drawEdgeList.add(key)
             }
-        } catch { }
+        }
 
-        let plotsDefPoint = new Float32Array(num * edgeGroups * 4)
-        let plotsTwoPoint = new Float32Array(plotNum * twoGroup * 4)
-
-        let plotsDefNormal = new Float32Array(num * edgeGroups * 4)
-        let plotsTwoNormal = new Float32Array(plotNum * twoGroup * 4)
-
-        let defL = 0,
-            twoL = 0
-
-        const bindGroups = new Array(num + plotNum)
         // 绘制个数
-        const numTriangles = num + plotNum
+        const numTriangles = drawEdgeList.size
 
-        if(!numTriangles) return;
+        if (!numTriangles) return
 
         // uniform属性
         const uniformBytes = ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT
@@ -257,77 +192,182 @@ export default class EdgeHaloGPUProgram {
             size: numTriangles * alignedUniformBytes + Float32Array.BYTES_PER_ELEMENT * 16 * 2,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
         })
-        const uniformBufferData = new Float32Array(numTriangles * alignedUniformFloats)
 
-        let groups = new Array(),
-            def = new Array(),
-            two = new Array()
+        if (!cameraChanged) {
+            this.uniformBufferData = new Float32Array(numTriangles * alignedUniformFloats)
+            
+            let baseTypeHash = this.graph.getEdgeType().baseTypeHash
+            let forwadHashTable: any = new Map()
+            let drawLineHaloArray = new Array()
+            let num = 0,
+                plotNum = 0
 
-        // to do 提取到@computer中
-        drawLineHaloArray.forEach((item) => {
-            let id =  item.id
-            let edgeGroup = item.edgeGroup
+            try {
+                for (let [key, value] of edgeList) {
+                    if (!drawEdgeList.has(key)) continue
+                    // 获取点属性
+                    let attribute = value.getAttribute()
+                    let { halo, type, location } = attribute,
+                        source = value.getSource(),
+                        target = value.getTarget()
+                    let { attribute: souce_attribute, num: sourceNumber } = source.value,
+                        { attribute: target_attribute, num: targetNumber } = target.value
+                    if (type == 'basic') {
+                        let hash = hashNumber(sourceNumber, targetNumber), //两点之间的hash值
+                            hashSet = baseTypeHash?.get(hash), //两点之间hash表
+                            size = hashSet?.num
+                        if (!size) continue
+                        let lineNumber = [...hashSet.total].indexOf(key)
 
-            let { attrNormal, width, attrMiter, points: attrPoint } = item
-            let color = edgeList.get(id)?.getAttribute("halo.color") || "#eee"
-            let colorFloat = newfloatColor(color)
-            width /= 2;
-            // 曲线
-            if (edgeGroup == edgeGroups) {
-                for (let i = 0, j = 0; i < attrPoint.length; i += 2, j += 1) {
-                    plotsDefPoint[defL * edgeGroups * 4 + i] = attrPoint[i]
-                    plotsDefPoint[defL * edgeGroups * 4 + i + 1] = attrPoint[i + 1]
+                        if (globalInfo[graphId].enabledNoStraightLine) {
+                            size == 1 && size++
+                            size % 2 !== 0 && lineNumber++
+                        }
 
-                    plotsDefNormal[defL * edgeGroups * 4 + i] = attrNormal[i] * attrMiter[j] * width
-                    plotsDefNormal[defL * edgeGroups * 4 + i + 1] = attrNormal[i + 1] * attrMiter[j] * width 
+                        let forwardSource = forwadHashTable?.get(hash)?.sourceNumber,
+                            forward =
+                                lineNumber == 0
+                                    ? 1
+                                    : size % 2 == 0
+                                    ? lineNumber % 2 == 1 && sourceNumber != forwardSource
+                                        ? -1
+                                        : 1
+                                    : lineNumber % 2 == 0 && sourceNumber != forwardSource
+                                    ? -1
+                                    : 1,
+                            { x: targetX, y: targetY, radius: targetSize } = target_attribute,
+                            { x: sourceX, y: sourceY, radius: sourceSize } = souce_attribute
+                        let xyOffect = coordTransformation(graphId, sourceX, sourceY),
+                            xyOffect2 = coordTransformation(graphId, targetX, targetY),
+                            line
+                        ;(sourceX = xyOffect[0]),
+                            (sourceY = xyOffect[1]),
+                            (targetX = xyOffect2[0]),
+                            (targetY = xyOffect2[1])
+                        halo.location = location
+                        forwadHashTable?.set(hash, { sourceNumber, targetNumber })
+
+                        if (source != target) {
+                            size > 1 && size % 2 == 0 && lineNumber++
+                            line = createLineMesh(
+                                size,
+                                sourceX,
+                                sourceY,
+                                targetX,
+                                targetY,
+                                lineNumber,
+                                halo,
+                                targetSize,
+                                'circle',
+                                forward,
+                            )
+                        } else {
+                            line = loopLineMesh(
+                                'webgl',
+                                sourceX,
+                                sourceY,
+                                lineNumber,
+                                100,
+                                halo,
+                                sourceSize,
+                            )
+                        }
+                        if (line.bezierNumber == twoGroup) plotNum++
+                        else num++
+
+                        drawLineHaloArray.push({
+                            ...line.points,
+                            edgeGroup: line.bezierNumber,
+                            id: key,
+                        })
+                    }
                 }
-                defL++
-                def.push({ color: colorFloat, width })
-            }
-            // 直线
-            else {
-                for (let i = 0, j = 0; i < attrPoint.length; i += 2, j += 1) {
-                    plotsTwoPoint[twoL * twoGroup * 4 + i] = attrPoint[i]
-                    plotsTwoPoint[twoL * twoGroup * 4 + i + 1] = attrPoint[i + 1]
+            } catch {}
 
-                    plotsTwoNormal[twoL * twoGroup * 4 + i] = attrNormal[i] * attrMiter[j] * width
-                    plotsTwoNormal[twoL * twoGroup * 4 + i + 1] = attrNormal[i + 1] * attrMiter[j] * width
+            this.plotsDefPoint = new Float32Array(num * edgeGroups * 4)
+            this.plotsTwoPoint = new Float32Array(plotNum * twoGroup * 4)
+
+            this.plotsDefNormal = new Float32Array(num * edgeGroups * 4)
+            this.plotsTwoNormal = new Float32Array(plotNum * twoGroup * 4)
+
+            let defL = 0,
+                twoL = 0
+
+            this.bindGroups = new Array(numTriangles)
+
+            let groups = new Array(),
+                def = new Array(),
+                two = new Array()
+
+            // to do 提取到@computer中
+            drawLineHaloArray.forEach(item => {
+                let id = item.id
+                let edgeGroup = item.edgeGroup
+
+                let { attrNormal, width, attrMiter, points: attrPoint } = item
+                let color = edgeList.get(id)?.getAttribute('halo.color') || '#eee'
+                let colorFloat = newfloatColor(color)
+                width /= 2
+                // 曲线
+                if (edgeGroup == edgeGroups) {
+                    for (let i = 0, j = 0; i < attrPoint.length; i += 2, j += 1) {
+                        this.plotsDefPoint[defL * edgeGroups * 4 + i] = attrPoint[i]
+                        this.plotsDefPoint[defL * edgeGroups * 4 + i + 1] = attrPoint[i + 1]
+
+                        this.plotsDefNormal[defL * edgeGroups * 4 + i] =
+                            attrNormal[i] * attrMiter[j] * width
+                        this.plotsDefNormal[defL * edgeGroups * 4 + i + 1] =
+                            attrNormal[i + 1] * attrMiter[j] * width
+                    }
+                    defL++
+                    def.push({ color: colorFloat, width })
                 }
-                twoL++
-                two.push({ color: colorFloat,  width })
-            }
-        })
+                // 直线
+                else {
+                    for (let i = 0, j = 0; i < attrPoint.length; i += 2, j += 1) {
+                        this.plotsTwoPoint[twoL * twoGroup * 4 + i] = attrPoint[i]
+                        this.plotsTwoPoint[twoL * twoGroup * 4 + i + 1] = attrPoint[i + 1]
 
-
-
-        groups = [...two, ...def]
-
-        groups.forEach((item: any, i: number) => {
-            uniformBufferData[alignedUniformFloats * i + 0] = item.color // color
-            uniformBufferData[alignedUniformFloats * i + 1] = item.width // width
-
-            bindGroups[i] = device.createBindGroup({
-                layout: this.bindGroupLayout as GPUBindGroupLayout,
-                entries: [
-                    {
-                        binding: 0,
-                        resource: {
-                            buffer: uniformBuffer,
-                            offset: i * alignedUniformBytes,
-                            size: ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT,
-                        },
-                    },
-                ],
+                        this.plotsTwoNormal[twoL * twoGroup * 4 + i] =
+                            attrNormal[i] * attrMiter[j] * width
+                        this.plotsTwoNormal[twoL * twoGroup * 4 + i + 1] =
+                            attrNormal[i + 1] * attrMiter[j] * width
+                    }
+                    twoL++
+                    two.push({ color: colorFloat, width })
+                }
             })
-        })
 
-        const vertexEdgeTwoBuffer = CreateGPUBuffer(device, plotsTwoPoint)
+            groups = [...two, ...def]
 
-        const vertexEdgeTwoNormalBuffer = CreateGPUBuffer(device, plotsTwoNormal)
 
-        const vertexEdgeDefBuffer = CreateGPUBuffer(device, plotsDefPoint)
+            groups.forEach((item: any, i: number) => {
+                this.uniformBufferData[alignedUniformFloats * i + 0] = item.color // color
+                this.uniformBufferData[alignedUniformFloats * i + 1] = item.width // width
 
-        const vertexEdgeDefNormalBuffer = CreateGPUBuffer(device, plotsDefNormal)
+                this.bindGroups[i] = device.createBindGroup({
+                    layout: this.bindGroupLayout as GPUBindGroupLayout,
+                    entries: [
+                        {
+                            binding: 0,
+                            resource: {
+                                buffer: uniformBuffer,
+                                offset: i * alignedUniformBytes,
+                                size: ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT,
+                            },
+                        },
+                    ],
+                })
+            })
+        }
+
+        const vertexEdgeTwoBuffer = CreateGPUBuffer(device, this.plotsTwoPoint)
+
+        const vertexEdgeTwoNormalBuffer = CreateGPUBuffer(device, this.plotsTwoNormal)
+
+        const vertexEdgeDefBuffer = CreateGPUBuffer(device, this.plotsDefPoint)
+
+        const vertexEdgeDefNormalBuffer = CreateGPUBuffer(device, this.plotsDefNormal)
 
         const projection = mat4.perspective(
             mat4.create(),
@@ -353,14 +393,14 @@ export default class EdgeHaloGPUProgram {
             ],
         })
 
-        for (let offset = 0; offset < uniformBufferData.length; offset += this.maxMappingLength) {
-            const uploadCount = Math.min(uniformBufferData.length - offset, this.maxMappingLength)
+        for (let offset = 0; offset <  this.uniformBufferData.length; offset += this.maxMappingLength) {
+            const uploadCount = Math.min( this.uniformBufferData.length - offset, this.maxMappingLength)
 
             device.queue.writeBuffer(
                 uniformBuffer,
                 offset * Float32Array.BYTES_PER_ELEMENT,
-                uniformBufferData.buffer,
-                uniformBufferData.byteOffset,
+                this.uniformBufferData.buffer,
+                this.uniformBufferData.byteOffset,
                 uploadCount * Float32Array.BYTES_PER_ELEMENT,
             )
         }
@@ -373,18 +413,22 @@ export default class EdgeHaloGPUProgram {
         passEncoder.setBindGroup(1, uniformMatBindGroup)
 
         let g = 0
+
+        let plotNum = this.plotsTwoPoint.length / (twoGroup * 4)
+
+        let num = this.plotsDefPoint.length / (edgeGroups * 4)
+
         passEncoder.setVertexBuffer(0, vertexEdgeTwoBuffer)
         passEncoder.setVertexBuffer(1, vertexEdgeTwoNormalBuffer)
         for (let i = 0; i < plotNum; i++) {
-            passEncoder.setBindGroup(0, bindGroups[g++])
+            passEncoder.setBindGroup(0, this.bindGroups[g++])
             passEncoder.draw(twoGroup * 2, 1, twoGroup * 2 * i)
         }
 
-        // passEncoder.setPipeline(this.pipeline)
         passEncoder.setVertexBuffer(0, vertexEdgeDefBuffer)
         passEncoder.setVertexBuffer(1, vertexEdgeDefNormalBuffer)
         for (let i = 0; i < num; i++) {
-            passEncoder.setBindGroup(0, bindGroups[g++])
+            passEncoder.setBindGroup(0, this.bindGroups[g++])
             passEncoder.draw(edgeGroups * 2, 1, edgeGroups * 2 * i)
         }
     }

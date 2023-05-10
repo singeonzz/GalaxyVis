@@ -51,7 +51,7 @@ export default class galaxyvis extends Graph {
     private nodeProgram!: nodeProgram | nodeCanvas | fastnodeProgram | NodeGPUProgram //点渲染器
     private textProgram!: sdfTextProgram | lableCanvas | LabelGPUProgram //文字渲染器
     private edgeProgram!: edgeProgram | edgeCanvas | EdgeGPUProgram //边渲染器
-    private haloProgram!: haloProgram | haloCanvas | EdgeHaloGPUProgram | NodeHaloGPUProgram//光环渲染器
+    private haloProgram!: haloProgram | haloCanvas | EdgeHaloGPUProgram | NodeHaloGPUProgram //光环渲染器
     private debounce!: Function // 防抖函数
     private localUpdate: boolean = true //开启局部更新
     private textStatus: boolean = true //是否渲染文字
@@ -347,7 +347,7 @@ export default class galaxyvis extends Graph {
             canvas.width = width * window.devicePixelRatio
         }
         this.gpu = await InitGPU(canvas)
-        
+
         // 获取图片的上下文
         if (!globalProp.textureCtx) {
             globalProp.textureCtx = document
@@ -359,7 +359,6 @@ export default class galaxyvis extends Graph {
                 textureCtx = globalProp.textureCtx
             textureCtx.canvas.width = spriteAtlasWidth
             textureCtx.canvas.height = spriteAtlasHeight
-
         }
         let textureCtx = globalProp.textureCtx
         if (!textureCtx) {
@@ -598,8 +597,14 @@ export default class galaxyvis extends Graph {
         if (!basicData[GraphId]) {
             return void 0
         }
-        if (this.renderer !== 'webgl') {
+        if (this.renderer === 'canvas') {
             return this.renderCanvas(true, viewChange)
+        }
+
+        if (this.renderer === 'webgpu') {
+            return this.webgpuRender({
+                cameraChanged: true
+            })
         }
 
         if (thumbnailInfo[GraphId] && !this.thumbnail) {
@@ -650,6 +655,7 @@ export default class galaxyvis extends Graph {
             if (i === 5 && viewChange) that.debounce()
         }
     }
+
     // 单个或者少许更新
     public async selectMovefresh(boolean: boolean = false): Promise<void> {
         let GraphId = this.id
@@ -833,11 +839,9 @@ export default class galaxyvis extends Graph {
         this.frameId = await requestFrame(tickFrame)
     }
 
-    private tr = throttle(()=>{
-        
-    }, 16)
+    private tr = throttle(() => {}, 16)
 
-    public async webgpuRender() {
+    public async webgpuRender(opts: any = {}) {
         if (!basicData[this.id]) {
             return void 0
         }
@@ -847,7 +851,8 @@ export default class galaxyvis extends Graph {
         const that = this
 
         const showText = this.textStatus
-        let commandEncoder: any, passEncoder: any, textureView;
+        let commandEncoder: any, passEncoder: any, textureView
+        let { cameraChanged } = opts
 
         const renderPassDescriptor = {
             colorAttachments: [
@@ -861,21 +866,20 @@ export default class galaxyvis extends Graph {
         } as any
 
         if (this.frameId) {
-            const queue = device.queue;
+            const queue = device.queue
             await queue.onSubmittedWorkDone()
 
-            cancelFrame(this.frameId);
-            this.frameId = null;
-            textureView = null;
-            commandEncoder = null;
+            cancelFrame(this.frameId)
+            this.frameId = null
+            textureView = null
+            commandEncoder = null
         }
 
-        if (showText) {
-            this.camera?.quad.clear()
-        }
+        // if (showText && !cameraChanged) {
+        //     this.camera?.quad.clear()
+        // }
 
         if (device && device.queue) {
-
             textureView = context.getCurrentTexture().createView()
 
             renderPassDescriptor.colorAttachments[0].view = textureView
@@ -887,18 +891,18 @@ export default class galaxyvis extends Graph {
         }
 
         async function tickFrame() {
-            const queue = device.queue;
+            const queue = device.queue
 
-            await (that.haloProgram as NodeHaloGPUProgram).render(passEncoder);
-            
-            await (that.edgeProgram as EdgeGPUProgram).render(passEncoder);
+            await (that.haloProgram as NodeHaloGPUProgram).render(passEncoder, opts)
 
-            showText && await (that.textProgram as LabelGPUProgram).render(passEncoder, "edge");
+            await (that.edgeProgram as EdgeGPUProgram).render(passEncoder, opts)
 
-            await (that.nodeProgram as NodeGPUProgram).render(passEncoder);
+            showText && (await (that.textProgram as LabelGPUProgram).render(passEncoder, {...opts, renderType: "edge"}))
 
-            showText && await (that.textProgram as LabelGPUProgram).render(passEncoder, "node");
-            
+            await (that.nodeProgram as NodeGPUProgram).render(passEncoder, opts)
+
+            showText && (await (that.textProgram as LabelGPUProgram).render(passEncoder,  {...opts, renderType: "node"}))
+
             passEncoder.end()
 
             // 向GPU发出命令

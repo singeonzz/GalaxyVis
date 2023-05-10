@@ -28,7 +28,7 @@ const testEvent = () => {
         '#9DB09E',
         '#F8C821',
     ]
-    const drawNum = 4000
+    const drawNum = 5
     let arr = new Array()
     let num = Math.floor(Math.sqrt(drawNum) + 0.5)
     let line = new Array()
@@ -36,7 +36,7 @@ const testEvent = () => {
         arr[i] = {
             id: `n${i}`,
             attribute: {
-                x: (i % num) * 100,
+                x: (i % num) * 400,
                 y: Math.floor(i / num) * 100,
                 color: colors[Math.floor(Math.random() * colors.length) || 0],
                 // text: `n${i}`,
@@ -44,6 +44,10 @@ const testEvent = () => {
                     width: 2.0,
                     color: colors[Math.floor(Math.random() * colors.length) || 0],
                 },
+                // halo: {
+                //     width: 10,
+                //     color: "#f00"
+                // }
                 // icon: {
                 //     content: k3[i % 3],
                 //     font: 'iconfont',
@@ -69,18 +73,22 @@ const testEvent = () => {
             },
         }
 
-        // i != drawNum - 1 &&
-        //     (line[i] = {
-        //         source: `n${i}`,
-        //         target: `n${i + 1}`,
-        //         attribute: {
-        //             color: colors[Math.floor(Math.random() * colors.length) || 0],
-        //             // text: `e${i}`,
-        //             // shape: {
-        //             //     head: i % 2 == 0 ? 'arrow' : null,
-        //             // },
-        //         },
-        //     })
+        i != drawNum - 1 &&
+            (line[i] = {
+                source: `n${i}`,
+                target: `n${i + 1}`,
+                attribute: {
+                    color: colors[Math.floor(Math.random() * colors.length) || 0],
+                    // text: `e${i}`,
+                    // shape: {
+                    //     head: i % 2 == 0 ? 'arrow' : null,
+                    // },
+                    // halo: {
+                    //     width: 5,
+                    //     color: "#00f"
+                    // }
+                },
+            })
     }
 
     // line.push({
