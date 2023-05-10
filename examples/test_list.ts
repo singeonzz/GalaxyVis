@@ -28,7 +28,7 @@ const testEvent = () => {
         '#9DB09E',
         '#F8C821',
     ]
-    const drawNum = 4
+    const drawNum = 4000
     let arr = new Array()
     let num = Math.floor(Math.sqrt(drawNum) + 0.5)
     let line = new Array()
@@ -36,51 +36,51 @@ const testEvent = () => {
         arr[i] = {
             id: `n${i}`,
             attribute: {
-                x: (i % num) * 400 - 300,
-                y: Math.floor(i / num) * 200 - 100,
+                x: (i % num) * 100,
+                y: Math.floor(i / num) * 100,
                 color: colors[Math.floor(Math.random() * colors.length) || 0],
-                text: `n${i}`,
+                // text: `n${i}`,
                 innerStroke: {
                     width: 2.0,
                     color: colors[Math.floor(Math.random() * colors.length) || 0],
                 },
-                icon: {
-                    content: k3[i % 3],
-                    font: 'iconfont',
-                },
-                badges:
-                    i == 1
-                        ? {
-                              topRight: {
-                                  color: '#f00',
-                                  text: {
-                                      font: 'iconfont',
-                                      color: '#fff',
-                                      content: '\ue63a',
-                                      scale: 0.6,
-                                  },
-                                  stroke: {
-                                      color: '#fff',
-                                      width: 1,
-                                  },
-                              },
-                          }
-                        : null,
+                // icon: {
+                //     content: k3[i % 3],
+                //     font: 'iconfont',
+                // },
+                // badges:
+                //     i == 1
+                //         ? {
+                //               topRight: {
+                //                   color: '#f00',
+                //                   text: {
+                //                       font: 'iconfont',
+                //                       color: '#fff',
+                //                       content: '\ue63a',
+                //                       scale: 0.6,
+                //                   },
+                //                   stroke: {
+                //                       color: '#fff',
+                //                       width: 1,
+                //                   },
+                //               },
+                //           }
+                //         : null,
             },
         }
 
-        i != drawNum - 1 &&
-            (line[i] = {
-                source: `n${i}`,
-                target: `n${i + 1}`,
-                attribute: {
-                    color: colors[Math.floor(Math.random() * colors.length) || 0],
-                    text: `e${i}`,
-                    shape: {
-                        head: i % 2 == 0 ? 'arrow' : null,
-                    },
-                },
-            })
+        // i != drawNum - 1 &&
+        //     (line[i] = {
+        //         source: `n${i}`,
+        //         target: `n${i + 1}`,
+        //         attribute: {
+        //             color: colors[Math.floor(Math.random() * colors.length) || 0],
+        //             // text: `e${i}`,
+        //             // shape: {
+        //             //     head: i % 2 == 0 ? 'arrow' : null,
+        //             // },
+        //         },
+        //     })
     }
 
     // line.push({

@@ -31,13 +31,13 @@ export const nodeListLocate = (that: any, ids: string[], options?: AnimateOption
             let camera = that.camera
             let nodeList = basicData[GraphId].nodeList
             let renderer = that.renderer
-            let padding = renderer === 'webgl' ? 3 / 5 : 5
+            let padding = renderer !== 'canvas' ? 3 / 5 : 5
             for (let keys in ids) {
                 let key = ids[keys]
                 let value = nodeList.get(key)
                 let x = value.getAttribute('x')
                 let y = value.getAttribute('y')
-                if (renderer == 'webgl') {
+                if (renderer !== 'webgl') {
                     let offset = coordTransformation(GraphId, x, y)
                         ; (x = offset[0]), (y = offset[1])
                 }
@@ -52,7 +52,7 @@ export const nodeListLocate = (that: any, ids: string[], options?: AnimateOption
             let coordMid_x = (coordx_max + coordx_min) / 2
             let coordMid_y = (coordy_max + coordy_min) / 2
             let nowPosition = [-coordMid_x, -coordMid_y, 3]
-            if (renderer == 'webgl') {
+            if (renderer !== 'canvas') {
                 nowPosition = [coordMid_x, coordMid_y, 3]
             }
 
@@ -61,7 +61,7 @@ export const nodeListLocate = (that: any, ids: string[], options?: AnimateOption
                 coordx_max - coordx_min + 2 * padding,
             )
 
-            let zommratio = renderer === 'webgl' ? 12 : globalInfo[GraphId].canvasBox.width
+            let zommratio = renderer !== 'canvas' ? 12 : globalInfo[GraphId].canvasBox.width
 
             let zoom = (Math.atan2(maxratio, zommratio) * 360) / Math.PI
 
@@ -98,7 +98,7 @@ export const nodeLocate = (that: any, options?: AnimateOptions) => {
             }
             let x = that.getAttribute('x'),
                 y = that.getAttribute('y')
-            let offset = that.renderer === 'webgl' ? coordTransformation(that.id, x, y) : [-x, -y]
+            let offset = that.renderer !== 'canvas' ? coordTransformation(that.id, x, y) : [-x, -y]
                 ; (x = offset[0]), (y = offset[1])
             let nowPosition = [x, y, 3]
             let zoom = globalProp.defaultZoom

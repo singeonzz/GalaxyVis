@@ -40,7 +40,7 @@ export const renderSVG = (graph: any, svg: any) => {
     // 获取相机当前位置
     position = cloneDeep(graph.camera.position)
     // 适配postion和zoom
-    if (graph.renderer === 'webgl') {
+    if (graph.renderer !== 'canvas') {
         let width = globalInfo[graph.id].BoxCanvas.getWidth,
             height = globalInfo[graph.id].BoxCanvas.getHeight,
             unitWidth = width / ratio,

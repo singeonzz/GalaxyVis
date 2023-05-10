@@ -259,7 +259,9 @@ export default class NodeGPUProgram {
         }
         let nodeIndex = 0
         nodes.forEach((item: any) => {
-            let { x, y, radius, color, innerStroke, isSelect, image, icon, badges } =
+            let id = item.getId();
+
+            let { x, y, radius, color, innerStroke, isSelect, image, icon, badges, shape } =
                 item.getAttribute()
 
             let zoomResults: number = Math.ceil((radius / globalProp.standardRadius) * 1e2) / 1e3
@@ -288,6 +290,18 @@ export default class NodeGPUProgram {
                 strokeColor = newfloatColor(innerStroke?.selectedColor || innerStroke || '#fff')
             } else {
                 strokeColor = newfloatColor(innerStroke?.color || innerStroke || '#fff')
+            }
+
+            if (graph.textStatus) {
+                camera.quad.insert({
+                    x: offsets[0],
+                    y: offsets[1],
+                    height: zoomResults * 2,
+                    width: zoomResults * 2,
+                    id,
+                    isNode: true,
+                    shape,
+                })
             }
 
             addUniformData(

@@ -57,7 +57,7 @@ class Camera {
         worldUp: vec3 = [0, 1, 0],
     ) {
         this.graphId = graphId
-        this.renderer = gl instanceof CanvasRenderingContext2D ? 'canvas' : 'webgl'
+        this.renderer = gl instanceof CanvasRenderingContext2D ? 'canvas' : 'gl'
         this.position = position
         this.thumbnail = thumbnail
         this.worldUp = worldUp
@@ -122,7 +122,7 @@ class Camera {
 
         let newRatio = 2 * (this.position[2] * Math.tan((this.zoom * Math.PI) / 360))
 
-        if (this.renderer === 'webgl') {
+        if (this.renderer === 'gl') {
             let x = ((pointX * ratio) / width) * this.aspectRatio,
                 y = (pointY * ratio) / height,
                 offsetX = ((pointX * newRatio) / width) * this.aspectRatio,
@@ -183,7 +183,7 @@ class Camera {
             height = this.thumbnail ? globalThumbnail?.height : this.gl.canvas.height
         pointX = getX(e)
         pointY = getY(e)
-        if (this.isMouseDown && this.renderer == 'webgl') {
+        if (this.isMouseDown && this.renderer == 'gl') {
             this.isMoving = true
             if (this.mouseType == 1) {
                 // 拖动

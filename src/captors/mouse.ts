@@ -104,11 +104,11 @@ class CaptorsMouse {
             screenY = getY(e) - height / 2,
             // 转换为webgl或canvas的坐标
             mouseX =
-                this.renderType === 'webgl'
+                this.renderType !== 'canvas'
                     ? (this.mouseX = ((screenX * ratio) / width) * aspectRatio)
                     : (this.mouseX = getX(e)),
             mouseY =
-                this.renderType === 'webgl'
+                this.renderType !== 'canvas'
                     ? (this.mouseY = (-screenY * ratio) / height)
                     : (this.mouseY = getY(e))
         // 如果当前没有选中点或边
@@ -238,7 +238,7 @@ class CaptorsMouse {
                 // 获取当前在画布上的坐标
                 pointX = getX(e)
                 pointY = getY(e)
-                if (this.renderType === 'webgl') {
+                if (this.renderType !== 'canvas') {
                     x =
                         ((pointX - this.startMouseX) * ratio * aspectRatio) /
                         (width / basicData[this.scene.id].transform)
@@ -1021,7 +1021,7 @@ class CaptorsMouse {
         let { id } = item,
             position = this.camera.position;
 
-        let edgeBoundBox = this.renderType === "webgl"
+        let edgeBoundBox = this.renderType !== "canvas"
             ? basicData[graphId].edgeBoundBox
             : basicData[graphId].edgeCanvasBoundBox
         if (edgeBoundBox.has(id)) {

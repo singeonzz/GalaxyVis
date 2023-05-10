@@ -846,6 +846,7 @@ export default class galaxyvis extends Graph {
 
         const that = this
 
+        const showText = this.textStatus
         let commandEncoder: any, passEncoder: any, textureView;
 
         const renderPassDescriptor = {
@@ -869,6 +870,10 @@ export default class galaxyvis extends Graph {
             commandEncoder = null;
         }
 
+        if (showText) {
+            this.camera?.quad.clear()
+        }
+
         if (device && device.queue) {
 
             textureView = context.getCurrentTexture().createView()
@@ -888,11 +893,11 @@ export default class galaxyvis extends Graph {
             
             await (that.edgeProgram as EdgeGPUProgram).render(passEncoder);
 
-            await (that.textProgram as LabelGPUProgram).render(passEncoder, "edge");
+            showText && await (that.textProgram as LabelGPUProgram).render(passEncoder, "edge");
 
             await (that.nodeProgram as NodeGPUProgram).render(passEncoder);
 
-            await (that.textProgram as LabelGPUProgram).render(passEncoder, "node");
+            showText && await (that.textProgram as LabelGPUProgram).render(passEncoder, "node");
             
             passEncoder.end()
 

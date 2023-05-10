@@ -14,7 +14,7 @@ import { renderSVG } from './renderSVG'
 export function exportImageHandler(type: string, graph: any, options?: ImageExportOptions) {
     return new Promise(async (resolve, reject) => {
         try {
-            let canvas = graph.renderer === 'webgl' ? graph.gl.canvas : graph.ctx.canvas
+            let canvas = graph.renderer !== 'canvas' ? graph.gl.canvas : graph.ctx.canvas
             // 初始参数
             let filename = options?.filename || `graph.${type}`
             let textWatermark = options?.textWatermark || undefined
@@ -596,7 +596,7 @@ var XMLNS = 'http://www.w3.org/2000/svg'
 export const exportSVGHandler = (type: string, graph: any, options?: SvgExportOptions) => {
     return new Promise(async (resolve, reject) => {
         try {
-            let canvas = graph.renderer === 'webgl' ? graph.gl.canvas : graph.ctx.canvas
+            let canvas = graph.renderer !== 'canvas' ? graph.gl.canvas : graph.ctx.canvas
             // 初始参数
             let filename = options?.filename || `graph.${type}`
             let download = true

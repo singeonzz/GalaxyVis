@@ -87,7 +87,7 @@ export class lasso<T, K> {
     }
 
     activate() {
-        if (this.galaxyvis.renderer == 'webgl')
+        if (this.galaxyvis.renderer !== 'canvas')
             this.divContainer = this.galaxyvis.gl.canvas.parentNode
         else this.divContainer = this.galaxyvis.ctx.canvas.parentNode
         if (!this.isActive) {

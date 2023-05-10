@@ -44,7 +44,7 @@ export default class overLay {
                     let ratio = camera.ratio;
                     let scale = (globalProp.globalScale / ratio) * 2.0
 
-                    if (renderType === "webgl") {
+                    if (renderType !== "canvas") {
                         position[0] *= -transform;
                         position[1] *= transform;
                     }

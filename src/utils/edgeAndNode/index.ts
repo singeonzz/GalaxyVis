@@ -122,9 +122,9 @@ export const addClass = (
             classAttributes(that, selfClasses, classList, nodeOrEdge)
             let attribute = that.value.attribute
 
-            if (nodeOrEdge && that.renderer === 'webgl') {
+            if (nodeOrEdge && that.renderer !== 'canvas') {
                 initWebglAttribute(that, attribute)
-            } else if (that.renderer === 'webgl' && !that.thumbnail) {
+            } else if (that.renderer !== 'canvas' && !that.thumbnail) {
                 let flag = updateSDFTextData(attribute?.text, GraphId)
                 if (flag) initText(that)
                 drawText(

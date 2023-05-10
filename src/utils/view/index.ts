@@ -80,7 +80,7 @@ export const viewLocateGraph = (galaxyvis: any, options?: any) => {
         let { thumbnail, BoxCanvas } = globalInfo[GraphId]
 
         let renderType = galaxyvis.renderer
-        if(renderType === "webgpu") renderType = "webgl"
+
         let coordRight: number = -Infinity, //右边界
             coordLeft: number = Infinity, //左边界
             coordTop: number = -Infinity, //上边界
@@ -117,7 +117,7 @@ export const viewLocateGraph = (galaxyvis: any, options?: any) => {
             zoomBasic = useMatrix ? BoxCanvas.getHeight : BoxCanvas.getWidth,
             thubnailBasic;
 
-        if (renderType == 'webgl') {
+        if (renderType !== 'canvas') {
             let offset = coordTransformation(GraphId, coordMid_x, coordMid_y)
             nowPosition = [offset[0], offset[1], 3];
         }
@@ -129,8 +129,7 @@ export const viewLocateGraph = (galaxyvis: any, options?: any) => {
         );
 
         zoomratio = (thumbnail && galaxyvis.thumbnail) ?
-            // (renderType == "webgl" ? zoomBasic - transform : thubnailBasic) :
-            (renderType == "webgl" ? zoomBasic + transform / 2 : (1 - transform / 2 / zoomBasic) * thubnailBasic) :
+            (renderType !== "canvas" ? zoomBasic + transform / 2 : (1 - transform / 2 / zoomBasic) * thubnailBasic) :
             zoomBasic + transform
 
         let zoom = Math.ceil(((Math.atan2(maxratio, zoomratio) * 360) / Math.PI))
