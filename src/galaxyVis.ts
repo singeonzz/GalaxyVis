@@ -36,6 +36,8 @@ import { CheckWebGPU, GetTexture, InitGPU } from './utils/webGPUtils'
 import NodeGPUProgram from './renderers/webgpu/programs/node'
 import EdgeGPUProgram from './renderers/webgpu/programs/edge'
 import LabelGPUProgram from './renderers/webgpu/programs/label'
+import EdgeHaloGPUProgram from './renderers/webgpu/programs/edgeHalo'
+import NodeHaloGPUProgram from './renderers/webgpu/programs/nodeHalo'
 
 export default class galaxyvis extends Graph {
     public gl!: WebGLRenderingContext // webgl上下文
@@ -49,7 +51,7 @@ export default class galaxyvis extends Graph {
     private nodeProgram!: nodeProgram | nodeCanvas | fastnodeProgram | NodeGPUProgram //点渲染器
     private textProgram!: sdfTextProgram | lableCanvas | LabelGPUProgram //文字渲染器
     private edgeProgram!: edgeProgram | edgeCanvas | EdgeGPUProgram //边渲染器
-    private haloProgram!: haloProgram | haloCanvas //光环渲染器
+    private haloProgram!: haloProgram | haloCanvas | EdgeHaloGPUProgram | NodeHaloGPUProgram//光环渲染器
     private debounce!: Function // 防抖函数
     private localUpdate: boolean = true //开启局部更新
     private textStatus: boolean = true //是否渲染文字
@@ -558,6 +560,8 @@ export default class galaxyvis extends Graph {
         this.nodeProgram = new NodeGPUProgram(this)
         this.edgeProgram = new EdgeGPUProgram(this)
         this.textProgram = new LabelGPUProgram(this)
+
+        this.haloProgram = new NodeHaloGPUProgram(this)
     }
 
     // 清理缓冲区和图片缓存
@@ -880,6 +884,8 @@ export default class galaxyvis extends Graph {
         async function tickFrame() {
             const queue = device.queue;
 
+            await (that.haloProgram as NodeHaloGPUProgram).render(passEncoder);
+            
             await (that.edgeProgram as EdgeGPUProgram).render(passEncoder);
 
             await (that.textProgram as LabelGPUProgram).render(passEncoder, "edge");

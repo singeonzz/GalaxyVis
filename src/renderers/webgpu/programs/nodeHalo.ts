@@ -1,13 +1,14 @@
-import nodeVert from '../shaders/node.vert.wgsl'
-import nodeFrag from '../shaders/node.frag.wgsl'
+import nodeHaloVert from '../shaders/node.halo.vert.wgsl'
+import nodeHaloFrag from '../shaders/node.halo.frag.wgsl'
 import { CreateGPUBuffer, CreateGPUBufferUint } from '../../../utils/webGPUtils'
 import { basicData, globalProp } from '../../../initial/globalProp'
 import { coordTransformation, newfloatColor } from '../../../utils'
 import { mat4, glMatrix } from 'gl-matrix'
+import EdgeHaloGPUProgram from './edgeHalo'
 
-const ATTRIBUTES = 10
+const ATTRIBUTES = 4
 
-export default class NodeGPUProgram {
+export default class NodeHaloGPUProgram {
     private gpu: {
         device: GPUDevice
         canvas: HTMLCanvasElement
@@ -21,12 +22,6 @@ export default class NodeGPUProgram {
     private matsBindGroupLayout: GPUBindGroupLayout | undefined
     private pipeline: GPURenderPipeline | undefined
     private isInit = true
-    private ts:
-        | {
-              texture: GPUTexture
-              sampler: GPUSampler
-          }
-        | undefined
 
     constructor(graph: any) {
         this.graph = graph
@@ -60,19 +55,6 @@ export default class NodeGPUProgram {
                         minBindingSize: 64 * 2,
                     },
                 },
-                {
-                    binding: 1,
-                    visibility: GPUShaderStage.FRAGMENT,
-                    sampler: {},
-                },
-                {
-                    binding: 2,
-                    visibility: GPUShaderStage.FRAGMENT,
-                    texture: {
-                        sampleType: 'float',
-                        viewDimension: '2d',
-                    },
-                },
             ],
         }))
 
@@ -84,7 +66,7 @@ export default class NodeGPUProgram {
             layout: 'auto',
             vertex: {
                 module: device.createShaderModule({
-                    code: nodeVert,
+                    code: nodeHaloVert,
                 }),
                 entryPoint: 'vert_main',
                 buffers: [
@@ -111,7 +93,7 @@ export default class NodeGPUProgram {
             },
             fragment: {
                 module: device.createShaderModule({
-                    code: nodeFrag,
+                    code: nodeHaloFrag,
                 }),
                 entryPoint: 'frag_main',
                 targets: [
@@ -145,15 +127,13 @@ export default class NodeGPUProgram {
 
         this.isInit = false
 
-        this.ts = globalProp.gpuTexture
     }
 
     async render(passEncoder: any) {
+
+        await new EdgeHaloGPUProgram(this.graph).render(passEncoder)
+
         this.isInit && (await this.initPineLine())
-
-        this.ts = globalProp.gpuTexture
-
-        if (!this.ts) return
 
         const that = this
 
@@ -176,26 +156,17 @@ export default class NodeGPUProgram {
 
         // badges;
         nodes.forEach((item: any) => {
-            let id = item.getId()
-            let badges = item.getAttribute('badges')
-            const isBadges = badges ? true : false
+            let id = item.getId();
+            let { halo } = item.getAttribute()
 
-            drawNodeList.set(id, {
-                badges: isBadges,
-            })
-
-            if (isBadges) {
-                let badgesArray = Object.keys(badges)
-                for (let i = 0; i < badgesArray.length; i++) {
-                    drawNodeList.set(`badges_${badgesArray[i]}` + id, {
-                        badges: true,
-                    })
-                }
+            let { width } = halo;
+            if(width && width > 0){
+                drawNodeList.set(id, item)
             }
         })
 
         // 绘制个数
-        const numTriangles = drawNodeList.size || nodes.size
+        const numTriangles = drawNodeList.size
 
         if(!numTriangles) return;
 
@@ -214,35 +185,19 @@ export default class NodeGPUProgram {
 
         const bindGroups = new Array(numTriangles)
 
-        const atlas = globalProp.atlas
-        const iconMap = globalProp.iconMap
-        const wid = 128
 
         function addUniformData(
             i: number,
             zoomResults: number,
             offsets: number[],
             colorFloat: number,
-            strokeWidth: number,
-            strokeColor: number,
-            iconType: number,
-            iconColor: number,
-            uv_x: number,
-            uv_y: number,
+    
         ) {
             uniformBufferData[alignedUniformFloats * i + 0] = zoomResults // scale
             uniformBufferData[alignedUniformFloats * i + 1] = offsets[0] // x
             uniformBufferData[alignedUniformFloats * i + 2] = offsets[1] // y
             uniformBufferData[alignedUniformFloats * i + 3] = colorFloat // floatColor
-            uniformBufferData[alignedUniformFloats * i + 4] = strokeWidth // StrokeWidth
-            uniformBufferData[alignedUniformFloats * i + 5] = strokeColor // StrokeColor
-
-            uniformBufferData[alignedUniformFloats * i + 6] = iconType // iconType
-            uniformBufferData[alignedUniformFloats * i + 7] = iconColor // iconColor
-
-            uniformBufferData[alignedUniformFloats * i + 8] = uv_x // uv_x
-            uniformBufferData[alignedUniformFloats * i + 9] = uv_y // uv_y
-
+     
             bindGroups[i] = device.createBindGroup({
                 layout: that.bindGroupLayout as GPUBindGroupLayout,
                 entries: [
@@ -258,105 +213,27 @@ export default class NodeGPUProgram {
             })
         }
         let nodeIndex = 0
-        nodes.forEach((item: any) => {
-            let { x, y, radius, color, innerStroke, isSelect, image, icon, badges } =
-                item.getAttribute()
+        drawNodeList.forEach((item: any) => {
+            let { x, y, halo, radius } = item.getAttribute()
 
-            let zoomResults: number = Math.ceil((radius / globalProp.standardRadius) * 1e2) / 1e3
+            let { color, width } = halo;
+
+            let haloRadius = Number(radius + width / 2)
+    
+            // 真实的r比例
+            let zoomResults: number = Math.ceil((haloRadius / globalProp.standardRadius) * 1e2) / 1e3
 
             let offsets: number[] = coordTransformation(graphId, x, y, transform)
 
             let colorFloat = newfloatColor(color)
-
-            let strokeWidth = (Number(innerStroke?.width) >= 0 ? innerStroke.width : 2) / 1e2
-
-            let iconNum: number = image.url
-                ? iconMap.get(image.url + color)?.num
-                : iconMap.get(icon.content)?.num
-
-            let iconType = image.url ? 1 : icon.content != '' ? 2 : 3
-
-            if (!iconNum) {
-                iconNum = 0
-            }
-            let iconColor = newfloatColor(icon?.color || '#f00')
-            let uv_x = ((wid * iconNum) % (wid * atlas)) / (wid * atlas),
-                uv_y = 1 - (wid + wid * Math.floor(iconNum / atlas)) / (wid * atlas)
-
-            let strokeColor
-            if (isSelect) {
-                strokeColor = newfloatColor(innerStroke?.selectedColor || innerStroke || '#fff')
-            } else {
-                strokeColor = newfloatColor(innerStroke?.color || innerStroke || '#fff')
-            }
-
+       
             addUniformData(
                 nodeIndex++,
                 zoomResults,
                 offsets,
                 colorFloat,
-                strokeWidth,
-                strokeColor,
-                iconType,
-                iconColor,
-                uv_x,
-                uv_y,
             )
-
-            if (badges) {
-                let badgesArray = Object.keys(badges)
-                for (let i = 0; i < badgesArray.length; i++) {
-                    let {
-                        color: badgesColor,
-                        scale,
-                        text,
-                        stroke,
-                        image,
-                        postion,
-                    } = badges[badgesArray[i]]
-                    badgesColor =
-                        badgesColor == 'inherit'
-                            ? colorFloat
-                            : badgesColor
-                            ? newfloatColor(badgesColor)
-                            : newfloatColor('#fff')
-                    scale = scale || 0.35
-                    let innerWidth = Number(stroke?.width) >= 0 ? stroke.width : 2
-                    let zoomResults2 = zoomResults
-                    let size = zoomResults2 * scale
-
-                    postion = badgesArray[i] || 'bottomRight'
-
-                    let direction = globalProp.direction
-
-                    let x = offsets[0] + direction[postion][0] * zoomResults * 0.6,
-                        y = offsets[1] - direction[postion][1] * zoomResults * 0.6
-                    let iconType = image ? 1 : text?.content != '' ? 2 : 3
-                    let badgesIconColor = newfloatColor(text?.color || '#f00')
-                    let iconNum: number = image
-                        ? iconMap.get(image)?.num
-                        : iconMap.get(text?.content || '')?.num
-
-                    let uv_x = ((wid * iconNum) % (wid * atlas)) / (wid * atlas),
-                        uv_y = 1 - (wid + wid * Math.floor(iconNum / atlas)) / (wid * atlas)
-
-                    addUniformData(
-                        nodeIndex++,
-                        size,
-                        [x,y],
-                        badgesColor,
-                        innerWidth / 1e2,
-                        newfloatColor(stroke?.color || '#fff'),
-                        iconType,
-                        badgesIconColor,
-                        uv_x,
-                        uv_y,
-                    )
-                }
-            }
         })
-
-        // console.log(uniformBufferData,"uniformBufferData")
 
         const projection = mat4.perspective(
             mat4.create(),
@@ -377,14 +254,6 @@ export default class NodeGPUProgram {
                         offset: matOffset,
                         size: 64 * 2,
                     },
-                },
-                {
-                    binding: 1,
-                    resource: this.ts.sampler,
-                },
-                {
-                    binding: 2,
-                    resource: this.ts.texture.createView(),
                 },
             ],
         })

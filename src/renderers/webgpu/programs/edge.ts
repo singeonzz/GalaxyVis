@@ -268,6 +268,8 @@ export default class EdgeGPUProgram {
         const bindGroups = new Array(num + plotNum)
         // 绘制个数
         const numTriangles = num + plotNum
+        if (!numTriangles) return
+
         // uniform属性
         const uniformBytes = ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT
         const alignedUniformBytes = Math.ceil(uniformBytes / 256) * 256
@@ -492,7 +494,8 @@ export default class EdgeGPUProgram {
         device.queue.writeBuffer(uniformArrowBuffer, matArrowOffset, view as ArrayBuffer)
         device.queue.writeBuffer(uniformArrowBuffer, matArrowOffset + 64, projection as ArrayBuffer)
 
-        let g = 0, h = 0;
+        let g = 0,
+            h = 0
         const vertexBuffer = CreateGPUBuffer(device, arrowVertexData)
 
         const drawArrow = (h: number) => {
@@ -514,18 +517,18 @@ export default class EdgeGPUProgram {
         }
 
         initTwo()
-        let reInit = false;
+        let reInit = false
         for (let i = 0; i < plotNum; i++) {
-            reInit && initTwo();
+            reInit && initTwo()
 
             passEncoder.setBindGroup(0, bindGroups[g])
             passEncoder.draw(twoGroup * 2, 1, twoGroup * 2 * i)
 
             if (groups[g].hasArrow) {
-                drawArrow(h);
-                h++;
-                reInit = true;
-            }else{
+                drawArrow(h)
+                h++
+                reInit = true
+            } else {
                 reInit = false
             }
             g++
@@ -538,7 +541,7 @@ export default class EdgeGPUProgram {
             passEncoder.setVertexBuffer(1, vertexEdgeDefNormalBuffer)
         }
 
-        reInit = false;
+        reInit = false
         initDef()
         for (let i = 0; i < num; i++) {
             reInit && initDef()
@@ -546,15 +549,14 @@ export default class EdgeGPUProgram {
             passEncoder.setBindGroup(0, bindGroups[g])
             passEncoder.draw(edgeGroups * 2, 1, edgeGroups * 2 * i)
 
-               if (groups[g].hasArrow) {
-                drawArrow(h);
-                h++;
-                reInit = true;
-            }else{
+            if (groups[g].hasArrow) {
+                drawArrow(h)
+                h++
+                reInit = true
+            } else {
                 reInit = false
             }
             g++
         }
-
     }
 }
