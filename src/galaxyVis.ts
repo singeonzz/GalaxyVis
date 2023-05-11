@@ -348,6 +348,9 @@ export default class galaxyvis extends Graph {
         }
         this.gpu = await InitGPU(canvas)
 
+        globalInfo[this.id].BoxCanvas.setWidth = width
+        globalInfo[this.id].BoxCanvas.setHeight = height
+
         // 获取图片的上下文
         if (!globalProp.textureCtx) {
             globalProp.textureCtx = document
@@ -603,7 +606,7 @@ export default class galaxyvis extends Graph {
 
         if (this.renderer === 'webgpu') {
             return this.webgpuRender({
-                cameraChanged: true
+                cameraChanged: true,
             })
         }
 
@@ -664,7 +667,7 @@ export default class galaxyvis extends Graph {
         }
         if (this.renderer == 'canvas') return this.renderCanvas(boolean)
 
-        if (this.renderer == 'webgpu') return this.webgpuRender({Partial: true})
+        if (this.renderer == 'webgpu') return this.webgpuRender({ Partial: true })
 
         if (this.thumbnail || globalInfo[GraphId].thumbnail) return this.render()
         if (!this.localUpdate || !this.textStatus) return this.render()
@@ -842,7 +845,7 @@ export default class galaxyvis extends Graph {
         this.frameId = await requestFrame(tickFrame)
     }
 
-    private tr = throttle(async (opts) => {
+    private tr = throttle(async opts => {
         const { device, context } = this.gpu
 
         const that = this
@@ -894,11 +897,19 @@ export default class galaxyvis extends Graph {
 
             await (that.edgeProgram as EdgeGPUProgram).render(passEncoder, opts)
 
-            showText && (await (that.textProgram as LabelGPUProgram).render(passEncoder, {...opts, renderType: "edge"}))
+            showText &&
+                (await (that.textProgram as LabelGPUProgram).render(passEncoder, {
+                    ...opts,
+                    renderType: 'edge',
+                }))
 
             await (that.nodeProgram as NodeGPUProgram).render(passEncoder, opts)
 
-            showText && (await (that.textProgram as LabelGPUProgram).render(passEncoder,  {...opts, renderType: "node"}))
+            showText &&
+                (await (that.textProgram as LabelGPUProgram).render(passEncoder, {
+                    ...opts,
+                    renderType: 'node',
+                }))
 
             passEncoder.end()
 
@@ -912,6 +923,5 @@ export default class galaxyvis extends Graph {
             return void 0
         }
         this.tr(opts)
-
     }
 }
