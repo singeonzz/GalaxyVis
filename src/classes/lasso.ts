@@ -12,10 +12,10 @@ export class lasso<T, K> {
     private camera: any //相机对象
     private isActive: boolean //是否弃用
     private divContainer!: HTMLElement //生成的父级容器
-    private drawingCanvas!: HTMLCanvasElement | undefined//绘制的canvas
+    private drawingCanvas!: HTMLCanvasElement | undefined //绘制的canvas
     private drawingContext!: CanvasRenderingContext2D | undefined //绘制的canvas2d
     private isDrawing: boolean //是否正在拖动
-    private drewPoints: Array<{ x: number, y: number }> //画线的点
+    private drewPoints: Array<{ x: number; y: number }> //画线的点
     private selectedNodes: any[] //选中的点
     private callback: any // 回调函数
 
@@ -87,15 +87,16 @@ export class lasso<T, K> {
     }
 
     activate() {
-        if (this.galaxyvis.renderer !== 'canvas')
-            this.divContainer = this.galaxyvis.gl.canvas.parentNode
-        else this.divContainer = this.galaxyvis.ctx.canvas.parentNode
+        this.divContainer = this.galaxyvis.divContainer
+
         if (!this.isActive) {
             this.isActive = true
             if (!document.getElementById('lasso')) {
                 // 创建lasso的画布
                 this.initDOM('canvas', 'lasso')
-                this.drawingContext = (this.drawingCanvas as HTMLCanvasElement).getContext('2d') as CanvasRenderingContext2D
+                this.drawingContext = (this.drawingCanvas as HTMLCanvasElement).getContext(
+                    '2d',
+                ) as CanvasRenderingContext2D
                 this.drawingCanvas!.style.cursor = 'cursor'
             }
         }
@@ -132,8 +133,8 @@ export class lasso<T, K> {
         dom.style.left = '0px'
         dom.style.top = '0px'
         dom.id = id
-        let width = globalInfo[this.galaxyvis.id].BoxCanvas.getWidth
-        let height = globalInfo[this.galaxyvis.id].BoxCanvas.getHeight
+        let width = this.divContainer.clientWidth
+        let height = this.divContainer.clientHeight
 
         // 设置宽高
         if (window.devicePixelRatio) {
@@ -257,8 +258,8 @@ export class lasso<T, K> {
                 for (let [key, value] of nodes) {
                     let attributes = value.getAttribute()
                     let { x, y } = attributes
-                        // 根据相机位置更改点的初始位置
-                        ; (x += position[0]), (y += position[1])
+                    // 根据相机位置更改点的初始位置
+                    ;(x += position[0]), (y += position[1])
 
                     x *= scale / 2.0
                     y *= scale / 2.0
@@ -308,7 +309,12 @@ export class lasso<T, K> {
 
             this.galaxyvis.events.emit('nodesSelected', nodeList)
 
-            this.drawingContext!.clearRect(0, 0, this.drawingCanvas!.width, this.drawingCanvas!.height)
+            this.drawingContext!.clearRect(
+                0,
+                0,
+                this.drawingCanvas!.width,
+                this.drawingCanvas!.height,
+            )
             this.drawingCanvas!.style.cursor = 'default'
             e.stopPropagation()
 
