@@ -466,7 +466,8 @@ export default class galaxyvis extends Graph {
         try {
             let gl = this.gl
             let canvas: HTMLCanvasElement = (
-                    this.renderer === 'webgl' ? gl.canvas : this.ctx.canvas
+                    this.renderer === 'webgl' ? gl.canvas : 
+                    this.renderer === "webgpu" ? null : this.ctx.canvas
                 ) as HTMLCanvasElement,
                 container: HTMLElement = this.divContainer as HTMLElement,
                 width = getContainerWidth(container),
@@ -505,6 +506,23 @@ export default class galaxyvis extends Graph {
                     canvas.width = width
                 }
             } else {
+                let canvas = this.gpu.canvas
+
+                if (canvas && (canvas.width != width || canvas.height != height)) {
+                    canvas.height = height
+                    canvas.width = width
+                    canvas.style.width = width + 'px'
+                    canvas.style.height = height + 'px'
+                }
+                if (globalProp.textSet.size) {
+                    sdfCreate(this, globalProp.textSet, this.thumbnail)
+                }
+                if (Object.keys(globalProp.labelStore).length) {
+                    for (let i in globalProp.labelStore) {
+                        let { size, maxLength, str, style } = globalProp.labelStore[i]
+                        drawText(size, str, maxLength, style)
+                    }
+                }
             }
 
             if (globalInfo[id].thumbnail && this.thumbnail) {
@@ -521,7 +539,9 @@ export default class galaxyvis extends Graph {
             if (this.overLay) {
                 this.resizeLayers(width, height, 'overlayPass_' + id, 'overlay')
             }
-        } catch {}
+        } catch (err){
+            console.log(err)
+        }
     }
 
     private resizeLayers(width: number, height: number, id: string, type: string) {
@@ -852,6 +872,7 @@ export default class galaxyvis extends Graph {
 
         const showText = this.textStatus
         let commandEncoder: any, passEncoder: any, textureView
+        
         let { cameraChanged } = opts
 
         const renderPassDescriptor = {

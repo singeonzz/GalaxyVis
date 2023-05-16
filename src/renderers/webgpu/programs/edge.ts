@@ -45,6 +45,7 @@ export default class EdgeGPUProgram {
     private arrowGroups: any[]
     private bindGroups: any[]
     private arrowBindGroups: any[]
+    private uniformMatBindGroup: GPUBindGroup | undefined
 
     constructor(graph: any) {
         this.graph = graph
@@ -266,6 +267,94 @@ export default class EdgeGPUProgram {
         this.hasArrowInit = false
     }
 
+    recordRenderPass(
+        // numTriangles: number,
+        vertexEdgeTwoBuffer: GPUBuffer | null,
+        vertexEdgeTwoNormalBuffer: GPUBuffer | null | undefined,
+        vertexEdgeDefBuffer: GPUBuffer | null | undefined,
+        vertexEdgeDefNormalBuffer: GPUBuffer | null | undefined,
+        passEncoder: GPURenderBundleEncoder | GPURenderPassEncoder,
+    ) {
+        if (!this.pipeline) return
+
+        const { device } = this.gpu
+
+        let g = 0,
+            h = 0
+        const vertexBuffer = CreateGPUBuffer(device, arrowVertexData)
+
+        const indexData = new Uint32Array([0, 1, 2, 2, 1, 3])
+        const indexBuffer = CreateGPUBufferUint(device, indexData)
+
+        const drawArrow = (h: number) => {
+            if (!this.arrowPipeline) return
+
+            passEncoder.setPipeline(this.arrowPipeline)
+            passEncoder.setVertexBuffer(0, vertexBuffer)
+            passEncoder.setIndexBuffer(indexBuffer, 'uint32')
+            passEncoder.setBindGroup(0, this.arrowBindGroups[h])
+            passEncoder.drawIndexed(6, 1)
+        }
+
+        const initTwo = () => {
+            if (!this.pipeline) return
+
+            passEncoder.setPipeline(this.pipeline)
+            passEncoder.setVertexBuffer(0, vertexEdgeTwoBuffer as GPUBuffer)
+            passEncoder.setVertexBuffer(1, vertexEdgeTwoNormalBuffer as GPUBuffer)
+        }
+
+        const initDef = () => {
+            if (!this.pipeline) return
+
+            passEncoder.setPipeline(this.pipeline)
+            passEncoder.setVertexBuffer(0, vertexEdgeDefBuffer as GPUBuffer)
+            passEncoder.setVertexBuffer(1, vertexEdgeDefNormalBuffer as GPUBuffer)
+        }
+
+        passEncoder.setBindGroup(1, this.uniformMatBindGroup as GPUBindGroup)
+        initTwo()
+        let reInit = false
+
+        let plotNum = this.plotsTwoPoint.length / (twoGroup * 4)
+
+        let num = this.plotsDefPoint.length / (edgeGroups * 4)
+
+        for (let i = 0; i < plotNum; i++) {
+            reInit && initTwo()
+
+            passEncoder.setBindGroup(0, this.bindGroups[g])
+            passEncoder.draw(twoGroup * 2, 1, twoGroup * 2 * i)
+
+            if (this.groups[g].hasArrow) {
+                drawArrow(h)
+                h++
+                reInit = true
+            } else {
+                reInit = false
+            }
+            g++
+        }
+
+        reInit = false
+        initDef()
+        for (let i = 0; i < num; i++) {
+            reInit && initDef()
+
+            passEncoder.setBindGroup(0, this.bindGroups[g])
+            passEncoder.draw(edgeGroups * 2, 1, edgeGroups * 2 * i)
+
+            if (this.groups[g].hasArrow) {
+                drawArrow(h)
+                h++
+                reInit = true
+            } else {
+                reInit = false
+            }
+            g++
+        }
+    }
+
     async render(passEncoder: any, opts: any) {
         let { cameraChanged } = opts
 
@@ -275,7 +364,7 @@ export default class EdgeGPUProgram {
         const graph = this.graph
         const camera = graph.camera
         const graphId = graph.id
-        const { device, canvas } = this.gpu
+        const { device, canvas, format } = this.gpu
         const edges = graph.getEdges()
         const elength = edges.size
         // 绘制个数
@@ -403,7 +492,6 @@ export default class EdgeGPUProgram {
                     twoL++
                     two.push({ color: colorFloat, width, hasArrow })
                 }
-                
             })
 
             this.groups = [...two, ...def]
@@ -428,6 +516,25 @@ export default class EdgeGPUProgram {
             })
 
             this.arrowGroups = [...twoArrow, ...defArrow]
+
+            for (
+                let offset = 0;
+                offset < this.uniformBufferData.length;
+                offset += this.maxMappingLength
+            ) {
+                const uploadCount = Math.min(
+                    this.uniformBufferData.length - offset,
+                    this.maxMappingLength,
+                )
+
+                device.queue.writeBuffer(
+                    uniformBuffer,
+                    offset * Float32Array.BYTES_PER_ELEMENT,
+                    this.uniformBufferData.buffer,
+                    this.uniformBufferData.byteOffset,
+                    uploadCount * Float32Array.BYTES_PER_ELEMENT,
+                )
+            }
         }
 
         const arrowNum = this.arrowGroups.length
@@ -471,6 +578,25 @@ export default class EdgeGPUProgram {
                     ],
                 })
             })
+
+            for (
+                let offset = 0;
+                offset < this.uniformBufferArrowData.length;
+                offset += this.maxMappingLength
+            ) {
+                const uploadCount = Math.min(
+                    this.uniformBufferArrowData.length - offset,
+                    this.maxMappingLength,
+                )
+
+                device.queue.writeBuffer(
+                    uniformArrowBuffer,
+                    offset * Float32Array.BYTES_PER_ELEMENT,
+                    this.uniformBufferArrowData.buffer,
+                    this.uniformBufferArrowData.byteOffset,
+                    uploadCount * Float32Array.BYTES_PER_ELEMENT,
+                )
+            }
         }
 
         const vertexEdgeTwoBuffer = CreateGPUBuffer(device, this.plotsTwoPoint)
@@ -491,7 +617,7 @@ export default class EdgeGPUProgram {
         const view = camera.getViewMatrix()
 
         const matOffset = numTriangles * alignedUniformBytes
-        const uniformMatBindGroup = device.createBindGroup({
+        this.uniformMatBindGroup = device.createBindGroup({
             layout: this.matsBindGroupLayout as GPUBindGroupLayout,
             entries: [
                 {
@@ -504,115 +630,23 @@ export default class EdgeGPUProgram {
                 },
             ],
         })
-
-        for (
-            let offset = 0;
-            offset < this.uniformBufferData.length;
-            offset += this.maxMappingLength
-        ) {
-            const uploadCount = Math.min(
-                this.uniformBufferData.length - offset,
-                this.maxMappingLength,
-            )
-
-            device.queue.writeBuffer(
-                uniformBuffer,
-                offset * Float32Array.BYTES_PER_ELEMENT,
-                this.uniformBufferData.buffer,
-                this.uniformBufferData.byteOffset,
-                uploadCount * Float32Array.BYTES_PER_ELEMENT,
-            )
-        }
-
         device.queue.writeBuffer(uniformBuffer, matOffset, view as ArrayBuffer)
         device.queue.writeBuffer(uniformBuffer, matOffset + 64, projection as ArrayBuffer)
 
-        for (
-            let offset = 0;
-            offset < this.uniformBufferArrowData.length;
-            offset += this.maxMappingLength
-        ) {
-            const uploadCount = Math.min(
-                this.uniformBufferArrowData.length - offset,
-                this.maxMappingLength,
-            )
+        const renderBundleEncoder = device.createRenderBundleEncoder({
+            colorFormats: [format],
+          });
 
-            device.queue.writeBuffer(
-                uniformArrowBuffer,
-                offset * Float32Array.BYTES_PER_ELEMENT,
-                this.uniformBufferArrowData.buffer,
-                this.uniformBufferArrowData.byteOffset,
-                uploadCount * Float32Array.BYTES_PER_ELEMENT,
-            )
-        }
+        this.recordRenderPass(
+            vertexEdgeTwoBuffer,
+            vertexEdgeTwoNormalBuffer,
+            vertexEdgeDefBuffer,
+            vertexEdgeDefNormalBuffer,
+            renderBundleEncoder
+        );
 
-        let g = 0,
-            h = 0
-        const vertexBuffer = CreateGPUBuffer(device, arrowVertexData)
+        const renderBundle = renderBundleEncoder.finish();
 
-        const indexData = new Uint32Array([0, 1, 2, 2, 1, 3])
-        const indexBuffer = CreateGPUBufferUint(device, indexData)
-
-        const drawArrow = (h: number) => {
-            passEncoder.setPipeline(this.arrowPipeline)
-            passEncoder.setVertexBuffer(0, vertexBuffer)
-            passEncoder.setIndexBuffer(indexBuffer, 'uint32')
-            passEncoder.setBindGroup(0, this.arrowBindGroups[h])
-            passEncoder.drawIndexed(6, 1)
-        }
-
-        const initTwo = () => {
-            passEncoder.setPipeline(this.pipeline)
-            passEncoder.setVertexBuffer(0, vertexEdgeTwoBuffer)
-            passEncoder.setVertexBuffer(1, vertexEdgeTwoNormalBuffer)
-        }
-
-        const initDef = () => {
-            passEncoder.setPipeline(this.pipeline)
-            passEncoder.setVertexBuffer(0, vertexEdgeDefBuffer)
-            passEncoder.setVertexBuffer(1, vertexEdgeDefNormalBuffer)
-        }
-
-        passEncoder.setBindGroup(1, uniformMatBindGroup)
-        initTwo()
-        let reInit = false
-
-        let plotNum = this.plotsTwoPoint.length / (twoGroup * 4)
-
-        let num = this.plotsDefPoint.length / (edgeGroups * 4)
-
-        for (let i = 0; i < plotNum; i++) {
-            reInit && initTwo()
-
-            passEncoder.setBindGroup(0, this.bindGroups[g])
-            passEncoder.draw(twoGroup * 2, 1, twoGroup * 2 * i)
-
-            if (this.groups[g].hasArrow) {
-                drawArrow(h)
-                h++
-                reInit = true
-            } else {
-                reInit = false
-            }
-            g++
-        }
-
-        reInit = false
-        initDef()
-        for (let i = 0; i < num; i++) {
-            reInit && initDef()
-
-            passEncoder.setBindGroup(0, this.bindGroups[g])
-            passEncoder.draw(edgeGroups * 2, 1, edgeGroups * 2 * i)
-
-            if (this.groups[g].hasArrow) {
-                drawArrow(h)
-                h++
-                reInit = true
-            } else {
-                reInit = false
-            }
-            g++
-        }
+        passEncoder.executeBundles([renderBundle]);
     }
 }

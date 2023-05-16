@@ -6,6 +6,7 @@ import { coordTransformation, newfloatColor } from '../../../utils'
 import { mat4, glMatrix } from 'gl-matrix'
 
 const ATTRIBUTES = 10
+const vertexData = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1])
 
 export default class NodeGPUProgram {
     private gpu: {
@@ -18,9 +19,11 @@ export default class NodeGPUProgram {
     private graph: any
     private maxMappingLength: number
     private bindGroupLayout: GPUBindGroupLayout | undefined
+    private vertexBuffer: GPUBuffer | undefined
     private matsBindGroupLayout: GPUBindGroupLayout | undefined
     private pipeline: GPURenderPipeline | undefined
     private uniformBufferData: Float32Array
+    private uniformMatBindGroup: GPUBindGroup | undefined
     private bindGroups!: any[]
     private isInit = true
     private ts:
@@ -149,14 +152,41 @@ export default class NodeGPUProgram {
             layout: pipelineLayout,
         })
 
+        this.vertexBuffer = CreateGPUBuffer(device, vertexData)
+
         this.isInit = false
 
         this.ts = globalProp.gpuTexture
     }
 
+    recordRenderPass(
+        numTriangles: number,
+        passEncoder: GPURenderBundleEncoder | GPURenderPassEncoder
+    ) {
+        if(!this.pipeline) return;
+
+        const { device } = this.gpu
+
+        passEncoder.setPipeline(this.pipeline);
+
+        passEncoder.setVertexBuffer(0, this.vertexBuffer as GPUBuffer)
+
+        passEncoder.setBindGroup(1, this.uniformMatBindGroup as GPUBindGroup )
+
+        const indexData = new Uint32Array([0, 1, 2, 2, 1, 3])
+        const indexBuffer = CreateGPUBufferUint(device, indexData)
+        passEncoder.setIndexBuffer(indexBuffer, 'uint32')
+
+        for (let i = 0; i < numTriangles; ++i) {
+            passEncoder.setBindGroup(0, this.bindGroups[i])
+
+            passEncoder.drawIndexed(6, 1)
+        }
+    }
+
     async render(passEncoder: any, opts: any) {
         let { cameraChanged, Partial } = opts
-        // console.log(Partial)
+
         this.isInit && (await this.initPineLine())
 
         this.ts = globalProp.gpuTexture
@@ -173,19 +203,22 @@ export default class NodeGPUProgram {
 
         const transform = basicData[graphId]?.transform || 223
 
-        const { device, canvas } = this.gpu
-
-        const vertexData = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1])
-
-        const vertexBuffer = CreateGPUBuffer(device, vertexData)
-        const nodes = this.graph.getNodes()
+        const { device, canvas, format } = this.gpu
 
         const drawNodeList: any = new Map()
 
-        // badges;
-        nodes.forEach((item: any) => {
-            let id = item.getId()
-            let badges = item.getAttribute('badges')
+        const float32Nodes = new Map()
+
+        const nodeList = basicData[graphId].nodeList
+
+        for (const [id, item] of nodeList) {
+            let attribute = item.value.attribute
+        
+            let badges = attribute.badges;
+            let isVisible = attribute.isVisible;
+
+            if(!isVisible) continue;
+
             const isBadges = badges ? true : false
 
             drawNodeList.set(id, {
@@ -200,10 +233,12 @@ export default class NodeGPUProgram {
                     })
                 }
             }
-        })
+
+            float32Nodes.set(id, item)
+        }
 
         // 绘制个数
-        const numTriangles = drawNodeList.size || nodes.size
+        const numTriangles = drawNodeList.size || 0
 
         if (!numTriangles) return
 
@@ -269,9 +304,7 @@ export default class NodeGPUProgram {
 
             let boundBox: any = new Map()
             let nodeIndex = 0
-            nodes.forEach((item: any) => {
-                let id = item.getId()
-
+            for (const [id, item] of nodeList) {
                 let { x, y, radius, color, innerStroke, isSelect, image, icon, badges, shape } =
                     item.getAttribute()
 
@@ -391,16 +424,30 @@ export default class NodeGPUProgram {
                         )
                     }
                 }
-            })
+            }
 
-            basicData[graphId].boundBox = boundBox
+            basicData[graphId].boundBox = boundBox;
+
+            for (
+                let offset = 0;
+                offset < this.uniformBufferData.length;
+                offset += this.maxMappingLength
+            ) {
+                const uploadCount = Math.min(
+                    this.uniformBufferData.length - offset,
+                    this.maxMappingLength,
+                )
+    
+                device.queue.writeBuffer(
+                    uniformBuffer,
+                    offset * Float32Array.BYTES_PER_ELEMENT,
+                    this.uniformBufferData.buffer,
+                    this.uniformBufferData.byteOffset,
+                    uploadCount * Float32Array.BYTES_PER_ELEMENT,
+                )
+            }
         }
 
-        if (Partial){
-
-
-
-        }
 
         if(!this.uniformBufferData.length) return;
 
@@ -413,7 +460,8 @@ export default class NodeGPUProgram {
         )
         const view = camera.getViewMatrix()
         const matOffset = numTriangles * alignedUniformBytes
-        const uniformMatBindGroup = device.createBindGroup({
+
+        this.uniformMatBindGroup = device.createBindGroup({
             layout: this.matsBindGroupLayout as GPUBindGroupLayout,
             entries: [
                 {
@@ -435,42 +483,18 @@ export default class NodeGPUProgram {
             ],
         })
 
-        for (
-            let offset = 0;
-            offset < this.uniformBufferData.length;
-            offset += this.maxMappingLength
-        ) {
-            const uploadCount = Math.min(
-                this.uniformBufferData.length - offset,
-                this.maxMappingLength,
-            )
-
-            device.queue.writeBuffer(
-                uniformBuffer,
-                offset * Float32Array.BYTES_PER_ELEMENT,
-                this.uniformBufferData.buffer,
-                this.uniformBufferData.byteOffset,
-                uploadCount * Float32Array.BYTES_PER_ELEMENT,
-            )
-        }
-
-        passEncoder.setPipeline(this.pipeline)
-
+        
         device.queue.writeBuffer(uniformBuffer, matOffset, view as ArrayBuffer)
         device.queue.writeBuffer(uniformBuffer, matOffset + 64, projection as ArrayBuffer)
 
-        passEncoder.setVertexBuffer(0, vertexBuffer)
+        const renderBundleEncoder = device.createRenderBundleEncoder({
+            colorFormats: [format],
+          });
 
-        passEncoder.setBindGroup(1, uniformMatBindGroup)
+        this.recordRenderPass(numTriangles, renderBundleEncoder);
 
-        const indexData = new Uint32Array([0, 1, 2, 2, 1, 3])
-        const indexBuffer = CreateGPUBufferUint(device, indexData)
-        passEncoder.setIndexBuffer(indexBuffer, 'uint32')
+        const renderBundle = renderBundleEncoder.finish();
 
-        for (let i = 0; i < numTriangles; ++i) {
-            passEncoder.setBindGroup(0, this.bindGroups[i])
-
-            passEncoder.drawIndexed(6, 1)
-        }
+        passEncoder.executeBundles([renderBundle]);
     }
 }

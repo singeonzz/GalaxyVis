@@ -7,6 +7,7 @@ import { mat4, glMatrix } from 'gl-matrix'
 import EdgeHaloGPUProgram from './edgeHalo'
 
 const ATTRIBUTES = 4
+const vertexData = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1])
 
 export default class NodeHaloGPUProgram {
     private gpu: {
@@ -25,6 +26,7 @@ export default class NodeHaloGPUProgram {
     private bindGroups: any[]
     private uniformBufferData: Float32Array
     private edgeHalo: EdgeHaloGPUProgram
+    private uniformMatBindGroup: GPUBindGroup | undefined
 
     constructor(graph: any) {
         this.graph = graph
@@ -136,6 +138,32 @@ export default class NodeHaloGPUProgram {
         this.isInit = false
     }
 
+    recordRenderPass(
+        numTriangles: number,
+        passEncoder: GPURenderBundleEncoder | GPURenderPassEncoder
+    ) {
+        if(!this.pipeline) return;
+
+        const { device } = this.gpu
+        const vertexBuffer = CreateGPUBuffer(device, vertexData)
+
+        passEncoder.setPipeline(this.pipeline);
+
+        passEncoder.setVertexBuffer(0, vertexBuffer)
+
+        passEncoder.setBindGroup(1, this.uniformMatBindGroup as GPUBindGroup)
+
+        const indexData = new Uint32Array([0, 1, 2, 2, 1, 3])
+        const indexBuffer = CreateGPUBufferUint(device, indexData)
+        passEncoder.setIndexBuffer(indexBuffer, 'uint32')
+
+        for (let i = 0; i < numTriangles; ++i) {
+            passEncoder.setBindGroup(0, this.bindGroups[i])
+
+            passEncoder.drawIndexed(6, 1)
+        }
+    }
+
     async render(passEncoder: any, opts: any) {
         await this.edgeHalo.render(passEncoder, opts)
 
@@ -153,11 +181,8 @@ export default class NodeHaloGPUProgram {
 
         const transform = basicData[graphId]?.transform || 223
 
-        const { device, canvas } = this.gpu
+        const { device, canvas, format } = this.gpu
 
-        const vertexData = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1])
-
-        const vertexBuffer = CreateGPUBuffer(device, vertexData)
         const nodes = this.graph.getNodes()
 
         const drawNodeList: any = new Map()
@@ -237,6 +262,18 @@ export default class NodeHaloGPUProgram {
 
                 addUniformData(nodeIndex++, zoomResults, offsets, colorFloat)
             })
+
+            for (let offset = 0; offset < this.uniformBufferData.length; offset += this.maxMappingLength) {
+                const uploadCount = Math.min(this.uniformBufferData.length - offset, this.maxMappingLength)
+    
+                device.queue.writeBuffer(
+                    uniformBuffer,
+                    offset * Float32Array.BYTES_PER_ELEMENT,
+                    this.uniformBufferData.buffer,
+                    this.uniformBufferData.byteOffset,
+                    uploadCount * Float32Array.BYTES_PER_ELEMENT,
+                )
+            }
         }
 
         if(!this.uniformBufferData.length) return;
@@ -250,7 +287,7 @@ export default class NodeHaloGPUProgram {
         )
         const view = camera.getViewMatrix()
         const matOffset = numTriangles * alignedUniformBytes
-        const uniformMatBindGroup = device.createBindGroup({
+        this.uniformMatBindGroup = device.createBindGroup({
             layout: this.matsBindGroupLayout as GPUBindGroupLayout,
             entries: [
                 {
@@ -264,35 +301,21 @@ export default class NodeHaloGPUProgram {
             ],
         })
 
-        for (let offset = 0; offset < this.uniformBufferData.length; offset += this.maxMappingLength) {
-            const uploadCount = Math.min(this.uniformBufferData.length - offset, this.maxMappingLength)
-
-            device.queue.writeBuffer(
-                uniformBuffer,
-                offset * Float32Array.BYTES_PER_ELEMENT,
-                this.uniformBufferData.buffer,
-                this.uniformBufferData.byteOffset,
-                uploadCount * Float32Array.BYTES_PER_ELEMENT,
-            )
-        }
-
-        passEncoder.setPipeline(this.pipeline)
-
         device.queue.writeBuffer(uniformBuffer, matOffset, view as ArrayBuffer)
         device.queue.writeBuffer(uniformBuffer, matOffset + 64, projection as ArrayBuffer)
 
-        passEncoder.setVertexBuffer(0, vertexBuffer)
 
-        passEncoder.setBindGroup(1, uniformMatBindGroup)
+        const renderBundleEncoder = device.createRenderBundleEncoder({
+            colorFormats: [format],
+          });
 
-        const indexData = new Uint32Array([0, 1, 2, 2, 1, 3])
-        const indexBuffer = CreateGPUBufferUint(device, indexData)
-        passEncoder.setIndexBuffer(indexBuffer, 'uint32')
+        this.recordRenderPass(numTriangles, renderBundleEncoder);
 
-        for (let i = 0; i < numTriangles; ++i) {
-            passEncoder.setBindGroup(0, this.bindGroups[i])
+        const renderBundle = renderBundleEncoder.finish();
 
-            passEncoder.drawIndexed(6, 1)
-        }
+        passEncoder.executeBundles([renderBundle]);
+
+
+ 
     }
 }

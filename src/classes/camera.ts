@@ -257,6 +257,7 @@ class Camera {
         this.cameraChanged = true
         this.ratio = 2 * (this.position[2] * Math.tan((this.zoom * Math.PI) / 360))
         Throttle(this.events, viewChange)
+        // this.events.emit('camerarefresh', viewChange)
     }
 }
 

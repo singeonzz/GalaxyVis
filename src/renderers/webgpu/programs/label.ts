@@ -25,6 +25,7 @@ export default class LabelGPUProgram {
     private matsBindGroupLayout: GPUBindGroupLayout | undefined
     private pipeline: GPURenderPipeline | undefined
     private isInit = true
+    private uniformMatBindGroup: GPUBindGroup | undefined
 
     constructor(graph: any) {
         this.graph = graph
@@ -144,8 +145,35 @@ export default class LabelGPUProgram {
         this.isInit = false
     }
 
-    async render(passEncoder: any, opts: any) {
+    recordRenderPass(
+        numTriangles: number,
+        bindGroups: Array<any>,
+        passEncoder: GPURenderBundleEncoder | GPURenderPassEncoder,
+    ) {
+        if (!this.pipeline) return
 
+        const { device } = this.gpu
+
+        const vertexBuffer = CreateGPUBuffer(device, vertexData)
+
+        passEncoder.setPipeline(this.pipeline)
+
+        passEncoder.setVertexBuffer(0, vertexBuffer)
+
+        passEncoder.setBindGroup(1, this.uniformMatBindGroup as GPUBindGroup)
+
+        const indexData = new Uint32Array([0, 1, 2, 2, 1, 3])
+        const indexBuffer = CreateGPUBufferUint(device, indexData)
+        passEncoder.setIndexBuffer(indexBuffer, 'uint32')
+
+        for (let i = 0; i < numTriangles; ++i) {
+            passEncoder.setBindGroup(0, bindGroups[i])
+
+            passEncoder.drawIndexed(6, 1)
+        }
+    }
+
+    async render(passEncoder: any, opts: any) {
         let { renderType } = opts
 
         this.isInit && (await this.initPineLine())
@@ -157,13 +185,12 @@ export default class LabelGPUProgram {
         const camera = graph.camera
         const scale = globalProp.globalScale / camera.ratio
 
-        const { device, canvas } = this.gpu
+        const { device, canvas, format } = this.gpu
 
         let ts = await getGPULabelTexture(device)
 
         if (!ts) return
 
-        const vertexBuffer = CreateGPUBuffer(device, vertexData)
         let labelLength = 0
         const LabelsMap = new Map()
 
@@ -225,20 +252,19 @@ export default class LabelGPUProgram {
             floatArrayLength = 0
 
         LabelsMap.forEach((item: any, key: string) => {
-
             const attribute = renderType === 'node' ? item.getAttribute() : item
 
-            let p = 
-            renderType === 'node' ?
-                sdfDrawGPULable(graphId, attribute, 0, 1, alignedUniformFloats):
-                sdfDrawGPULable(graphId, attribute, attribute.ANGLE, 2, alignedUniformFloats)
+            let p =
+                renderType === 'node'
+                    ? sdfDrawGPULable(graphId, attribute, 0, 1, alignedUniformFloats)
+                    : sdfDrawGPULable(graphId, attribute, attribute.ANGLE, 2, alignedUniformFloats)
 
             uniformBufferData.set(p, floatArrayLength)
             floatArrayLength += p.length
 
             let text = attribute.text
             let content = text.content
-            
+
             for (let i = 0; i < content.length; i++) {
                 bindGroups[LabelIndex + i] = device.createBindGroup({
                     layout: this.bindGroupLayout as GPUBindGroupLayout,
@@ -273,7 +299,7 @@ export default class LabelGPUProgram {
         const SDFUnity = new Float32Array([atlas * 64, gammer])
 
         const matOffset = numTriangles * alignedUniformBytes
-        const uniformMatBindGroup = device.createBindGroup({
+        this.uniformMatBindGroup = device.createBindGroup({
             layout: this.matsBindGroupLayout as GPUBindGroupLayout,
             entries: [
                 {
@@ -307,24 +333,18 @@ export default class LabelGPUProgram {
             )
         }
 
-        passEncoder.setPipeline(this.pipeline)
-
         device.queue.writeBuffer(uniformBuffer, matOffset, view as ArrayBuffer)
         device.queue.writeBuffer(uniformBuffer, matOffset + 64, projection as ArrayBuffer)
         device.queue.writeBuffer(uniformBuffer, matOffset + 128, SDFUnity)
 
-        passEncoder.setVertexBuffer(0, vertexBuffer)
+        const renderBundleEncoder = device.createRenderBundleEncoder({
+            colorFormats: [format],
+        })
 
-        passEncoder.setBindGroup(1, uniformMatBindGroup)
+        this.recordRenderPass(numTriangles, bindGroups, renderBundleEncoder)
 
-        const indexData = new Uint32Array([0, 1, 2, 2, 1, 3])
-        const indexBuffer = CreateGPUBufferUint(device, indexData)
-        passEncoder.setIndexBuffer(indexBuffer, 'uint32')
+        const renderBundle = renderBundleEncoder.finish()
 
-        for (let i = 0; i < numTriangles; ++i) {
-            passEncoder.setBindGroup(0, bindGroups[i])
-
-            passEncoder.drawIndexed(6, 1)
-        }
+        passEncoder.executeBundles([renderBundle])
     }
 }

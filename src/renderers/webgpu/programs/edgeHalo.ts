@@ -23,6 +23,7 @@ export default class EdgeHaloGPUProgram {
     private pipeline: GPURenderPipeline | undefined
     private isInit = true
     private bindGroupLayout: GPUBindGroupLayout | undefined
+    private uniformMatBindGroup: GPUBindGroup | undefined
     private maxMappingLength: number
     private plotsDefPoint: Float32Array
     private plotsTwoPoint: Float32Array
@@ -150,6 +151,40 @@ export default class EdgeHaloGPUProgram {
         this.isInit = false
     }
 
+    recordRenderPass(
+        vertexEdgeTwoBuffer: GPUBuffer | null,
+        vertexEdgeTwoNormalBuffer: GPUBuffer | null | undefined,
+        vertexEdgeDefBuffer: GPUBuffer | null | undefined,
+        vertexEdgeDefNormalBuffer: GPUBuffer | null | undefined,
+        passEncoder: GPURenderBundleEncoder | GPURenderPassEncoder,
+    ) {
+        if (!this.pipeline) return
+
+        passEncoder.setPipeline(this.pipeline)
+
+        passEncoder.setBindGroup(1, this.uniformMatBindGroup as GPUBindGroup)
+
+        let g = 0
+
+        let plotNum = this.plotsTwoPoint.length / (twoGroup * 4)
+
+        let num = this.plotsDefPoint.length / (edgeGroups * 4)
+
+        passEncoder.setVertexBuffer(0, vertexEdgeTwoBuffer as GPUBuffer)
+        passEncoder.setVertexBuffer(1, vertexEdgeTwoNormalBuffer as GPUBuffer)
+        for (let i = 0; i < plotNum; i++) {
+            passEncoder.setBindGroup(0, this.bindGroups[g++])
+            passEncoder.draw(twoGroup * 2, 1, twoGroup * 2 * i)
+        }
+
+        passEncoder.setVertexBuffer(0, vertexEdgeDefBuffer as GPUBuffer)
+        passEncoder.setVertexBuffer(1, vertexEdgeDefNormalBuffer as GPUBuffer)
+        for (let i = 0; i < num; i++) {
+            passEncoder.setBindGroup(0, this.bindGroups[g++])
+            passEncoder.draw(edgeGroups * 2, 1, edgeGroups * 2 * i)
+        }
+    }
+
     async render(passEncoder: any, opts: any) {
         let { cameraChanged } = opts
 
@@ -158,7 +193,7 @@ export default class EdgeHaloGPUProgram {
         const graph = this.graph
         const camera = graph.camera
         const graphId = graph.id
-        const { device, canvas } = this.gpu
+        const { device, canvas, format } = this.gpu
 
         let edgeList = basicData[graphId].edgeList
         const drawEdgeList = new Set()
@@ -195,7 +230,7 @@ export default class EdgeHaloGPUProgram {
 
         if (!cameraChanged) {
             this.uniformBufferData = new Float32Array(numTriangles * alignedUniformFloats)
-            
+
             let baseTypeHash = this.graph.getEdgeType().baseTypeHash
             let forwadHashTable: any = new Map()
             let drawLineHaloArray = new Array()
@@ -340,7 +375,6 @@ export default class EdgeHaloGPUProgram {
 
             groups = [...two, ...def]
 
-
             groups.forEach((item: any, i: number) => {
                 this.uniformBufferData[alignedUniformFloats * i + 0] = item.color // color
                 this.uniformBufferData[alignedUniformFloats * i + 1] = item.width // width
@@ -359,6 +393,25 @@ export default class EdgeHaloGPUProgram {
                     ],
                 })
             })
+
+            for (
+                let offset = 0;
+                offset < this.uniformBufferData.length;
+                offset += this.maxMappingLength
+            ) {
+                const uploadCount = Math.min(
+                    this.uniformBufferData.length - offset,
+                    this.maxMappingLength,
+                )
+
+                device.queue.writeBuffer(
+                    uniformBuffer,
+                    offset * Float32Array.BYTES_PER_ELEMENT,
+                    this.uniformBufferData.buffer,
+                    this.uniformBufferData.byteOffset,
+                    uploadCount * Float32Array.BYTES_PER_ELEMENT,
+                )
+            }
         }
 
         const vertexEdgeTwoBuffer = CreateGPUBuffer(device, this.plotsTwoPoint)
@@ -379,7 +432,7 @@ export default class EdgeHaloGPUProgram {
         const view = camera.getViewMatrix()
 
         const matOffset = numTriangles * alignedUniformBytes
-        const uniformMatBindGroup = device.createBindGroup({
+        this.uniformMatBindGroup = device.createBindGroup({
             layout: this.matsBindGroupLayout as GPUBindGroupLayout,
             entries: [
                 {
@@ -393,43 +446,23 @@ export default class EdgeHaloGPUProgram {
             ],
         })
 
-        for (let offset = 0; offset <  this.uniformBufferData.length; offset += this.maxMappingLength) {
-            const uploadCount = Math.min( this.uniformBufferData.length - offset, this.maxMappingLength)
-
-            device.queue.writeBuffer(
-                uniformBuffer,
-                offset * Float32Array.BYTES_PER_ELEMENT,
-                this.uniformBufferData.buffer,
-                this.uniformBufferData.byteOffset,
-                uploadCount * Float32Array.BYTES_PER_ELEMENT,
-            )
-        }
-
-        passEncoder.setPipeline(this.pipeline)
-
         device.queue.writeBuffer(uniformBuffer, matOffset, view as ArrayBuffer)
         device.queue.writeBuffer(uniformBuffer, matOffset + 64, projection as ArrayBuffer)
 
-        passEncoder.setBindGroup(1, uniformMatBindGroup)
+        const renderBundleEncoder = device.createRenderBundleEncoder({
+            colorFormats: [format],
+        })
 
-        let g = 0
+        this.recordRenderPass(
+            vertexEdgeTwoBuffer,
+            vertexEdgeTwoNormalBuffer,
+            vertexEdgeDefBuffer,
+            vertexEdgeDefNormalBuffer,
+            renderBundleEncoder,
+        )
 
-        let plotNum = this.plotsTwoPoint.length / (twoGroup * 4)
+        const renderBundle = renderBundleEncoder.finish()
 
-        let num = this.plotsDefPoint.length / (edgeGroups * 4)
-
-        passEncoder.setVertexBuffer(0, vertexEdgeTwoBuffer)
-        passEncoder.setVertexBuffer(1, vertexEdgeTwoNormalBuffer)
-        for (let i = 0; i < plotNum; i++) {
-            passEncoder.setBindGroup(0, this.bindGroups[g++])
-            passEncoder.draw(twoGroup * 2, 1, twoGroup * 2 * i)
-        }
-
-        passEncoder.setVertexBuffer(0, vertexEdgeDefBuffer)
-        passEncoder.setVertexBuffer(1, vertexEdgeDefNormalBuffer)
-        for (let i = 0; i < num; i++) {
-            passEncoder.setBindGroup(0, this.bindGroups[g++])
-            passEncoder.draw(edgeGroups * 2, 1, edgeGroups * 2 * i)
-        }
+        passEncoder.executeBundles([renderBundle])
     }
 }
