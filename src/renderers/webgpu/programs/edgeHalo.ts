@@ -197,7 +197,8 @@ export default class EdgeHaloGPUProgram {
 
         let edgeList = basicData[graphId].edgeList
         const drawEdgeList = new Set()
-
+        let baseTypeHash = this.graph.getEdgeType().baseTypeHash
+        
         for (let [key, value] of edgeList) {
             let attribute = value.getAttribute()
             if (!attribute) continue
@@ -230,8 +231,6 @@ export default class EdgeHaloGPUProgram {
 
         if (!cameraChanged) {
             this.uniformBufferData = new Float32Array(numTriangles * alignedUniformFloats)
-
-            let baseTypeHash = this.graph.getEdgeType().baseTypeHash
             let forwadHashTable: any = new Map()
             let drawLineHaloArray = new Array()
             let num = 0,

@@ -596,6 +596,8 @@ export const graphClearGraph = (graph: any, destory: boolean = true) => {
         )
     }
 
+    graph.clearTypeHash()
+
     cleartNodeList()
     graph.camera.updateTransform()
     graph.clear()

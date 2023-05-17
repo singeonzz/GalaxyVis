@@ -160,6 +160,10 @@ export const excessGetEdgeType = (that: any) => {
         relationTable: basicData[GraphId].relationTable,
     }
 }
+export const clearHashEdgeType = () => {
+    typeHash = null; 
+    baseTypeHash = null;
+}
 /**
  * 获取要在webgl绘制的值
  * @param that

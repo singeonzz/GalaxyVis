@@ -38,6 +38,7 @@ import {
     getRelationTable,
     graphGetOriginData,
     getNodeTable,
+    clearHashEdgeType,
 } from '../utils/graph/excess'
 import { edgeAttributes, NodeAttributes, PlainObject } from '../types'
 
@@ -160,6 +161,11 @@ export default class Graph {
     getEdge = (edgeId: string | number, getHidden: boolean = false) => {
         return graphGetData(this.id, edgeId, 'edgeList', getHidden)
     }
+
+    clearTypeHash = () => {
+        return clearHashEdgeType()
+    }
+
     /**
      * 统计两点之间各个类型的个数
      * @returns
