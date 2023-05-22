@@ -2,7 +2,7 @@ import nodeHaloVert from '../shaders/node.halo.vert.wgsl'
 import nodeHaloFrag from '../shaders/node.halo.frag.wgsl'
 import { CreateGPUBuffer, CreateGPUBufferUint } from '../../../utils/webGPUtils'
 import { basicData, globalProp } from '../../../initial/globalProp'
-import { coordTransformation, newfloatColor } from '../../../utils'
+import { coordTransformation, isInSceen, newfloatColor } from '../../../utils'
 import { mat4, glMatrix } from 'gl-matrix'
 import EdgeHaloGPUProgram from './edgeHalo'
 
@@ -169,6 +169,8 @@ export default class NodeHaloGPUProgram {
 
         let { cameraChanged } = opts
 
+        cameraChanged = false
+
         this.isInit && (await this.initPineLine())
 
         const that = this
@@ -183,20 +185,26 @@ export default class NodeHaloGPUProgram {
 
         const { device, canvas, format } = this.gpu
 
-        const nodes = this.graph.getNodes()
+        const nodes = basicData[graphId].nodeList;
 
         const drawNodeList: any = new Map()
 
         // badges;
-        nodes.forEach((item: any) => {
-            let id = item.getId()
-            let { halo } = item.getAttribute()
+        for (const [id, item] of nodes) {
+            let attribute = item.value.attribute
+        
+            let isVisible = attribute.isVisible;
+
+            if(!isVisible || !isInSceen(graphId, 'webgl', camera.ratio, camera.position, attribute, 1)) continue;
+            
+            let halo = attribute.halo
 
             let { width } = halo
             if (width && width > 0) {
                 drawNodeList.set(id, item)
             }
-        })
+        }
+
 
         // 绘制个数
         const numTriangles = drawNodeList.size

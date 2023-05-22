@@ -6,7 +6,8 @@ import edgeFrag from '../shaders/edge.frag.wgsl'
 import arrowVert from '../shaders/arrow.vert.wgsl'
 import arrowFrag from '../shaders/arrow.frag.wgsl'
 
-import { newfloatColor } from '../../../utils'
+import { hashNumber, newfloatColor } from '../../../utils'
+import { getbashTypeHash } from '../../../utils/graph/gpu'
 
 const edgeGroups = globalProp.edgeGroups
 const twoGroup = 2
@@ -358,6 +359,8 @@ export default class EdgeGPUProgram {
     async render(passEncoder: any, opts: any) {
         let { cameraChanged } = opts
 
+        cameraChanged = false
+
         this.isInit && (await this.initPineLine())
         this.hasArrowInit && (await this.initArrowPineLine())
 
@@ -365,10 +368,35 @@ export default class EdgeGPUProgram {
         const camera = graph.camera
         const graphId = graph.id
         const { device, canvas, format } = this.gpu
-        const edges = graph.getEdges()
-        const elength = edges.size
+
+        let edgeList = basicData[graphId].edgeList
+        const drawEdgeList = new Set()
+
+        let baseTypeHash = getbashTypeHash(graphId)
+   
+        for (let [key, value] of edgeList) {
+            let attribute = value.getAttribute()
+            if (!attribute) continue
+            let { isVisible } = attribute,
+                source = value.getSource(),
+                target = value.getTarget()
+            if (!isVisible || typeof source == 'string' || typeof target == 'string') continue
+            if (typeof source == 'undefined' || typeof target == 'undefined') continue
+
+            let { num: sourceNumber } = source.value,
+                { num: targetNumber } = target.value
+
+            let hash = hashNumber(sourceNumber, targetNumber), //两点之间的hash值
+                hashSet = baseTypeHash?.get(hash), //两点之间hash表
+                size = hashSet?.num
+            if (!size) continue
+
+            drawEdgeList.add(key)
+            
+        }
+
         // 绘制个数
-        const numTriangles = elength
+        const numTriangles = drawEdgeList.size
         if (!numTriangles) return
 
         // uniform属性
@@ -384,12 +412,12 @@ export default class EdgeGPUProgram {
         if (!cameraChanged) {
             this.uniformBufferData = new Float32Array(numTriangles * alignedUniformFloats)
 
-            this.bindGroups = new Array(elength)
+            this.bindGroups = new Array(numTriangles)
 
             // 获取线集合
             let { lineDrawCount: edgeArray, num, plotNum } = this.graph.getEdgeWithArrow()
 
-            if (num + plotNum != elength) return
+            if (num + plotNum != numTriangles) return
 
             let edgeBoundBox = basicData[graphId].edgeBoundBox
             let edgeList = basicData[graphId].edgeList

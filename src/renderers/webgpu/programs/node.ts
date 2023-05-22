@@ -2,7 +2,7 @@ import nodeVert from '../shaders/node.vert.wgsl'
 import nodeFrag from '../shaders/node.frag.wgsl'
 import { CreateGPUBuffer, CreateGPUBufferUint } from '../../../utils/webGPUtils'
 import { basicData, globalProp } from '../../../initial/globalProp'
-import { coordTransformation, newfloatColor } from '../../../utils'
+import { coordTransformation, isInSceen, newfloatColor } from '../../../utils'
 import { mat4, glMatrix } from 'gl-matrix'
 
 const ATTRIBUTES = 10
@@ -186,7 +186,7 @@ export default class NodeGPUProgram {
 
     async render(passEncoder: any, opts: any) {
         let { cameraChanged, Partial } = opts
-
+        cameraChanged = false
         this.isInit && (await this.initPineLine())
 
         this.ts = globalProp.gpuTexture
@@ -217,7 +217,7 @@ export default class NodeGPUProgram {
             let badges = attribute.badges;
             let isVisible = attribute.isVisible;
 
-            if(!isVisible) continue;
+            if(!isVisible || !isInSceen(graphId, 'webgl', camera.ratio, camera.position, attribute, 1)) continue;
 
             const isBadges = badges ? true : false
 
@@ -236,7 +236,7 @@ export default class NodeGPUProgram {
 
             float32Nodes.set(id, item)
         }
-
+        // console.log(drawNodeList.size)
         // 绘制个数
         const numTriangles = drawNodeList.size || 0
 
@@ -304,7 +304,7 @@ export default class NodeGPUProgram {
 
             let boundBox: any = new Map()
             let nodeIndex = 0
-            for (const [id, item] of nodeList) {
+            for (const [id, item] of float32Nodes) {
                 let { x, y, radius, color, innerStroke, isSelect, image, icon, badges, shape } =
                     item.getAttribute()
 

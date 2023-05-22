@@ -41,6 +41,7 @@ import {
     clearHashEdgeType,
 } from '../utils/graph/excess'
 import { edgeAttributes, NodeAttributes, PlainObject } from '../types'
+import { gpuGetEdgeType } from '../utils/graph/gpu'
 
 export default class Graph {
     [x: string]: any
@@ -294,5 +295,9 @@ export default class Graph {
             this.render()
             return true
         }, timeout)
+    }
+
+    getEdgeTypeGpu() {
+        return gpuGetEdgeType(this)
     }
 }

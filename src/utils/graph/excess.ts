@@ -1,6 +1,7 @@
 import { coordTransformation, hashNumber } from '..'
 import { basicData, globalInfo, globalProp } from '../../initial/globalProp'
 import { createLineMesh, creatParallelLine, loopLineMesh } from '../edge/initEdge'
+import { getTypeHash, getbashTypeHash } from './gpu'
 
 const edgeGroups = globalProp.edgeGroups
 
@@ -179,6 +180,12 @@ export const excessGetEdgeDrawVal = (that: any) => {
     informationNewEdge = new Map()
 
     let forwadHashTable: Map<string | number, any> | null = new Map()
+
+    if(that.renderer === "webgpu"){
+        typeHash = getTypeHash(that.id)
+        baseTypeHash = getbashTypeHash(that.id)
+    }
+
     for (let [key, val] of edgeList) {
         let attribute = val?.value?.attribute
         if (!attribute) continue

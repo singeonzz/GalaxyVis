@@ -5,6 +5,7 @@ import edgeHaloVert from '../shaders/edge.vert.wgsl'
 import edgeHaloFrag from '../shaders/edge.frag.wgsl'
 import { coordTransformation, hashNumber, newfloatColor } from '../../../utils'
 import { createLineMesh, loopLineMesh } from '../../../utils/edge/initEdge'
+import { getbashTypeHash } from '../../../utils/graph/gpu'
 
 const edgeGroups = globalProp.edgeGroups
 const twoGroup = 2
@@ -188,6 +189,8 @@ export default class EdgeHaloGPUProgram {
     async render(passEncoder: any, opts: any) {
         let { cameraChanged } = opts
 
+        cameraChanged = false
+
         this.isInit && (await this.initPineLine())
 
         const graph = this.graph
@@ -197,8 +200,11 @@ export default class EdgeHaloGPUProgram {
 
         let edgeList = basicData[graphId].edgeList
         const drawEdgeList = new Set()
-        let baseTypeHash = this.graph.getEdgeType().baseTypeHash
-        
+
+        this.graph.getEdgeTypeGpu()
+
+        let baseTypeHash = getbashTypeHash(graphId)
+   
         for (let [key, value] of edgeList) {
             let attribute = value.getAttribute()
             if (!attribute) continue
@@ -207,6 +213,14 @@ export default class EdgeHaloGPUProgram {
                 target = value.getTarget()
             if (!isVisible || typeof source == 'string' || typeof target == 'string') continue
             if (typeof source == 'undefined' || typeof target == 'undefined') continue
+
+            let { num: sourceNumber } = source.value,
+                { num: targetNumber } = target.value
+
+            let hash = hashNumber(sourceNumber, targetNumber), //两点之间的hash值
+                hashSet = baseTypeHash?.get(hash), //两点之间hash表
+                size = hashSet?.num
+            if (!size) continue
 
             let { width } = halo
             if (width && width > 0) {
@@ -244,13 +258,13 @@ export default class EdgeHaloGPUProgram {
                     let { halo, type, location } = attribute,
                         source = value.getSource(),
                         target = value.getTarget()
-                    let { attribute: souce_attribute, num: sourceNumber } = source.value,
-                        { attribute: target_attribute, num: targetNumber } = target.value
                     if (type == 'basic') {
+                        let { attribute: souce_attribute, num: sourceNumber } = source.value,
+                            { attribute: target_attribute, num: targetNumber } = target.value
+
                         let hash = hashNumber(sourceNumber, targetNumber), //两点之间的hash值
                             hashSet = baseTypeHash?.get(hash), //两点之间hash表
                             size = hashSet?.num
-                        if (!size) continue
                         let lineNumber = [...hashSet.total].indexOf(key)
 
                         if (globalInfo[graphId].enabledNoStraightLine) {
